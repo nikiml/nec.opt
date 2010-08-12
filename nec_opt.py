@@ -7,9 +7,9 @@ import os, math
 import nec_eval as ne
 
 class NecFileEvaluator:
-	def __init__(self, sourcefile, out_dir, autosegmentation, ranges, target_levels, ncores=1, log=None, swr_coeficient = 1.0):
+	def __init__(self, sourcefile, out_dir, autosegmentation, ranges, target_levels, ncores=1, log=None, target_function = "max(max_gain_diff, max_swr_diff)"):
 		self.log = None
-		self.swr_coeficient = swr_coeficient
+		self.target_function = target_function
 		self.nec_file = ne.NecFileObject(sourcefile, out_dir)
 		self.nec_file.autoSegmentation(autosegmentation)
 		
@@ -92,6 +92,26 @@ class NecFileEvaluator:
 		self.nec_file.evaluate(self.ranges, self.ncores,cleanup=1)
 
 	def target(self, vector):
+		class RangeResult:
+			def __init__(self):
+				self.max_gain_diff = None
+				self.gain_diff_sum = .0
+				self.max_swr_diff = None
+				self.swr_diff_sum = .0
+				self.count = 0
+			def add(self, gain_diff, swr_diff):
+				if self.max_gain_diff is None or self.max_gain_diff < gain_diff:
+					self.max_gain_diff = gain_diff
+				if self.max_swr_diff is None or self.max_swr_diff < swr_diff:
+					self.max_swr_diff = swr_diff
+				self.gain_diff_sum = self.gain_diff_sum + gain_diff
+				self.swr_diff_sum = self.swr_diff_sum + swr_diff
+				self.count = self.count + 1
+
+
+		range_results = [] 
+		for i in range(len(self.ranges)): range_results.append(RangeResult())
+
 		vector = self.tanhTransform(vector)
 		for i in xrange(len(self.opt_vars)):
 			var = self.opt_vars[i]
@@ -106,11 +126,36 @@ class NecFileEvaluator:
 				for freq in nop.frequencies:
 					freqid = self.freqID(freq.freq)
 					tl = self.targetLevel(freqid[0], freqid[1])
-					#print "freq %g, target level %g, freqno %d"%(freq.freq, tl, freqid[1])
-					val = tl-freq.net()
-					if val > res: res = val
-					val = (freq.swr() - 2)*self.swr_coeficient
-					if val > res: res = val
+					gain_diff = tl-freq.net()
+					swr_diff = (freq.swr() - 2)
+					#print "freq %g, target level %g, freqno %d, gaindiff %g, swrdiff %g"%(freq.freq, tl, freqid[0], gain_diff, swr_diff)
+					range_results[freqid[0]].add(gain_diff, swr_diff)
+			d = {}
+			d["max_gain_diff"] = -1000.0
+			d["ave_max_gain_diff"] = 0.0
+			d["ave_gain_diff"] = 0.0
+			d["max_swr_diff"] = -1000.0
+			d["ave_max_swr_diff"] = 0.0
+			d["ave_swr_diff"] = 0.0
+			freq_count=0
+			for i in range_results:
+				if i.max_gain_diff > d["max_gain_diff"]:
+					d["max_gain_diff"] = i.max_gain_diff
+				d["ave_max_gain_diff"] = d["ave_max_gain_diff"]+i.max_gain_diff
+				d["ave_gain_diff"] = d["ave_gain_diff"] + i.gain_diff_sum
+				if i.max_swr_diff > d["max_swr_diff"]:
+					d["max_swr_diff"] = i.max_swr_diff
+				d["ave_max_swr_diff"] = d["ave_max_swr_diff"]+i.max_swr_diff
+				d["ave_swr_diff"] = d["ave_swr_diff"] + i.swr_diff_sum
+				freq_count = freq_count + i.count
+			d["ave_swr_diff"] = d["ave_swr_diff"]/freq_count
+			d["ave_gain_diff"] = d["ave_gain_diff"]/freq_count
+			d["ave_max_swr_diff"] = d["ave_max_swr_diff"]/len(self.ranges)
+			d["ave_max_gain_diff"] = d["ave_max_gain_diff"]/len(self.ranges)
+
+			#print d
+			res = eval(self.target_function, d)
+
 		except:
 			res = -1000
 		if res == -1000:
@@ -144,7 +189,7 @@ def optionsParser():
 			self.add_option("-M", "--max-iter", default=10000, type="int")
 			self.add_option("-L", "--local-search", action="store_true", default = False)
 			self.add_option("-T", "--local-search-tolerance", default = .001)
-			self.add_option("-K", "--swr-coeficient", default = 1.0, type='float')
+			self.add_option("-F", "--target-function", default = "max(max_gain_diff, max_swr_diff)", type='string')
 			
 		def parse_args(self):
 			options, args = ne.OptionParser.parse_args(self)
@@ -159,7 +204,7 @@ def optionsParser():
 
 def main():
 	options, args = optionsParser().parse_args()
-	evaluator = NecFileEvaluator(options.input, options.output,options.auto_segmentation, options.sweeps, options.target_levels,options.num_cores, options.log_file, options.swr_coeficient)
+	evaluator = NecFileEvaluator(options.input, options.output,options.auto_segmentation, options.sweeps, options.target_levels,options.num_cores, options.log_file, options.target_function)
 	ins_sol_vec = None
 	if options.seed_with_input:
 		ins_sol_vec = evaluator.x
