@@ -7,14 +7,16 @@ import os, math
 import nec_eval as ne
 
 class NecFileEvaluator:
-	def __init__(self, sourcefile, out_dir, autosegmentation, ranges, target_levels, ncores=1, log=None, target_function = "max(max_gain_diff, max_swr_diff)"):
+	def __init__(self, options):
+			#.input, options.output,options.auto_segmentation, options.sweeps, options.target_levels,options.num_cores, options.log_file, options.target_function
 		self.log = None
-		self.target_function = target_function
-		self.nec_file = ne.NecFileObject(sourcefile, out_dir)
-		self.nec_file.autoSegmentation(autosegmentation)
+		self.target_function = options.target_function
+		self.nec_file = ne.NecFileObject(options.input, options.output)
+		self.nec_file.autoSegmentation(options.auto_segmentation)
 		
-		self.ranges = ranges
-		self.target_levels = target_levels
+		self.ranges = options.sweeps
+		self.target_levels = options.target_levels
+		self.swr_target = options.swr_target
 		self.opt_vars = self.nec_file.min_max.keys()
 		self.tanh_domain = self.nec_file.min_max.values()
 		self.domain = len(self.nec_file.min_max.values())*[[-1,1]]
@@ -26,9 +28,9 @@ class NecFileEvaluator:
 
 		self.x = self.atanhTransform(self.x)
 
-		self.ncores = ncores
-		if log:
-			self.log = open(log,"at")
+		self.ncores = options.num_cores
+		if options.log_file:
+			self.log = open(options.log_file,"at")
 	def __del__(self):
 		if self.log:
 			self.log.close()
@@ -127,24 +129,30 @@ class NecFileEvaluator:
 					freqid = self.freqID(freq.freq)
 					tl = self.targetLevel(freqid[0], freqid[1])
 					gain_diff = tl-freq.net()
-					swr_diff = (freq.swr() - 2)
+					swr_diff = (freq.swr() - self.swr_target)
 					#print "freq %g, target level %g, freqno %d, gaindiff %g, swrdiff %g"%(freq.freq, tl, freqid[0], gain_diff, swr_diff)
 					range_results[freqid[0]].add(gain_diff, swr_diff)
 			d = {}
 			d["max_gain_diff"] = -1000.0
 			d["ave_max_gain_diff"] = 0.0
+			d["max_ave_gain_diff"] = -1000.0
 			d["ave_gain_diff"] = 0.0
 			d["max_swr_diff"] = -1000.0
 			d["ave_max_swr_diff"] = 0.0
+			d["max_ave_swr_diff"] = -1000.0
 			d["ave_swr_diff"] = 0.0
 			freq_count=0
 			for i in range_results:
 				if i.max_gain_diff > d["max_gain_diff"]:
 					d["max_gain_diff"] = i.max_gain_diff
+				if d["max_ave_gain_diff"] < i.gain_diff_sum/i.count:
+					d["max_ave_gain_diff"] = i.gain_diff_sum/i.count
 				d["ave_max_gain_diff"] = d["ave_max_gain_diff"]+i.max_gain_diff
 				d["ave_gain_diff"] = d["ave_gain_diff"] + i.gain_diff_sum
 				if i.max_swr_diff > d["max_swr_diff"]:
 					d["max_swr_diff"] = i.max_swr_diff
+				if d["max_ave_swr_diff"] < i.swr_diff_sum/i.count:
+					d["max_ave_swr_diff"] = i.swr_diff_sum/i.count
 				d["ave_max_swr_diff"] = d["ave_max_swr_diff"]+i.max_swr_diff
 				d["ave_swr_diff"] = d["ave_swr_diff"] + i.swr_diff_sum
 				freq_count = freq_count + i.count
@@ -189,7 +197,8 @@ def optionsParser():
 			self.add_option("-M", "--max-iter", default=10000, type="int")
 			self.add_option("-L", "--local-search", action="store_true", default = False)
 			self.add_option("-T", "--local-search-tolerance", default = .001)
-			self.add_option("-F", "--target-function", default = "max(max_gain_diff, max_swr_diff)", type='string')
+			self.add_option("-F", "--target-function", default = "max(max_gain_diff, max_swr_diff)", type='string', help="The evaluator calculates net gain and swr for each frequency of every sweep range. The optimizer then finds the difference between the gain and its target level and between the swr and its target level, thus calculating 'gain_diff' and 'swr_diff' for each frequency. As a second step it calculates the maximum and the average of those values for each sweep range: 'max_gain_diff', 'ave_gain_diff', 'max_swr_diff', 'ave_swr_diff'. Lastly it uses those value for every range and calculates the following values: 'max_gain_diff' - the absolute maximum of all gain_diffs for all frequencies, 'max_ave_gain_diff' - the maximum of all ave_gain_diffs for all sweep ranges, 'ave_max_gain_diff' - the average of all max_gain_diffs for all sweep ranges, 'ave_gain_diff' the average of all gain_diffs and the four swr counterparts 'max_swr_diff', 'max_ave_swr_diff', 'ave_max_swr_diff', 'ave_swr_diff'. The target function that the optimizer minimizes can be an expression of the last 8 values, by default it is '%default'")
+			self.add_option( "--swr-target", default = 2.0, type='float')
 			
 		def parse_args(self):
 			options, args = ne.OptionParser.parse_args(self)
@@ -197,6 +206,15 @@ def optionsParser():
 			if not options.sweeps:
 				options.sweeps = [(174,6,8),(470,6,40)]
 				options.target_levels = [(8.9,9.6,8.5, 8.2), (13.0,13.2,13.4,13.0)]
+				print "No sweeps parameters specified"
+			print "Sweeps set to:"
+			print options.sweeps
+			print "Target levels set to:"
+			print options.target_levels
+			print "SWR target level set to: %g:"% options.swr_target
+			print "Target function set to \"%s\"" % options.target_function
+
+
 			return (options,args)
 
 	return MainOptionParser()
@@ -204,7 +222,7 @@ def optionsParser():
 
 def main():
 	options, args = optionsParser().parse_args()
-	evaluator = NecFileEvaluator(options.input, options.output,options.auto_segmentation, options.sweeps, options.target_levels,options.num_cores, options.log_file, options.target_function)
+	evaluator = NecFileEvaluator(options)
 	ins_sol_vec = None
 	if options.seed_with_input:
 		ins_sol_vec = evaluator.x
