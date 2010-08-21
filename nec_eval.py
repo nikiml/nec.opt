@@ -96,6 +96,7 @@ class NecFileObject:
 		self.output = output
 		self.engine = engine
 		self.sourcefile = sourcefile
+		self.scale = 1
 		if sourcefile:
 			self.readSource(sourcefile)
 
@@ -128,18 +129,20 @@ class NecFileObject:
 				except:
 					self.dependent_vars.append(ln[3:].strip())
 			else:
-				self.varlines.append(ln.split())
+				self.varlines.append(ln.replace(',',' ').split())
 				if ln[0:2]=="EX":
 					self.source_tags[int(self.varlines[-1][2])]=len(self.varlines)-1
 				elif ln[0:2] == "FR":
 					self.frequency = float(self.varlines[-1][5])
+				elif ln[0:2] == "GS":
+					self.scale = float(self.varlines[-1][2])
 
 		for i in self.vars.keys():
 			self.vars[i]=float(self.vars[i])
 
 	def calcLength(self, line):
 		import math
-		return math.sqrt(math.pow(line[2]-line[5],2)+math.pow(line[3]-line[6],2)+math.pow(line[4]-line[7],2))
+		return self.scale*math.sqrt(math.pow(line[2]-line[5],2)+math.pow(line[3]-line[6],2)+math.pow(line[4]-line[7],2))
 
 	def autoSegment(self, line):
 		nsegs = self.calcLength(line)/self.autosegment[1]*self.autosegment[0]
@@ -319,7 +322,7 @@ class NecFileObject:
 			r.append(results[i])
 		return r
 
-	def evaluate(self, sweeps, num_cores=1, cleanup=0):
+	def evaluate(self, sweeps, char_impedance, num_cores=1, cleanup=0):
 		NOP = NecOutputParser 
 		results = self.runSweeps(sorted(sweeps), num_cores, cleanup) #[[174,6,8],[470,6,40]]
 		print "Input file : %s"%self.sourcefile 
@@ -331,7 +334,7 @@ class NecFileObject:
 		print "\n"
 	
 		for r in range(len(results)):
-			nop = NOP(results[r])
+			nop = NOP(results[r], char_impedance)
 			nop.printFreqs(r==0)
 
 
@@ -342,6 +345,7 @@ class OptionParser(optparse.OptionParser):
 		self.add_option("-o", "--output-dir", type="string", metavar="DIR", dest="output", default=output, help="output path [%default]")
 		self.add_option("-i", "--input", type="string", metavar="NEC_FILE", dest="input", default="", help="input nec file")
 		self.add_option("-s", "--sweep", type="string", metavar="SWEEP", action="append", dest="sweeps", help="adds a sweep range e.g. -s (174,6,8) for vhf-hi freqs")
+		self.add_option("-C", "--char-impedance", type="float", metavar="IMPEDANCE", default=300.0)
 		self.add_option("-u", "--uhf", "--uhf-52", action="append_const", dest="sweeps", const="(470,6,40)", help="adds a uhf (ch. 14-52) sweep")
 		self.add_option("-U", "--uhf-69", action="append_const", dest="sweeps", const="(470,6,57)", help="adds a uhf (ch. 14-69) sweep")
 		self.add_option("-V", "--vhf-hi", action="append_const", dest="sweeps", const="(174,6,8)", help="adds a vhf-hi (ch. 7-13) sweep")
@@ -382,9 +386,9 @@ def optionParser():
 def main():
 #default values
 	options, args = optionParser().parse_args()
-	nf = NecFileObject(options.input, options.output)
+	nf = NecFileObject(options.input, options.output, options.engine)
 	nf.autoSegmentation(options.auto_segmentation)
-	nf.evaluate(options.sweeps, options.num_cores)
+	nf.evaluate(options.sweeps, options.char_impedance, options.num_cores)
 
 	
 

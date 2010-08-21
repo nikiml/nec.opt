@@ -11,6 +11,7 @@ class NecFileEvaluator:
 			#.input, options.output,options.auto_segmentation, options.sweeps, options.target_levels,options.num_cores, options.log_file, options.target_function
 		self.log = None
 		self.target_function = options.target_function
+		self.char_impedance = options.char_impedance
 		self.nec_file = ne.NecFileObject(options.input, options.output)
 		self.nec_file.autoSegmentation(options.auto_segmentation)
 		
@@ -31,6 +32,17 @@ class NecFileEvaluator:
 		self.ncores = options.num_cores
 		if options.log_file:
 			self.log = open(options.log_file,"at")
+			self.log.write("============"*10+"\n")
+			self.log.write("Input file: "+options.input+"\n")
+			self.log.write("Sweep ranges: \n")
+			for i in range(len(self.ranges)):
+				self.log.write(str(self.ranges[i]) + " with target levels "+str(self.target_levels[i])+"\n")
+			self.log.write("SWR target: %g\n"%self.swr_target+"\n")
+			self.log.write("Target function: %s\n"%self.target_function+"\n")
+			
+			self.log.write("============"*10+"\n")
+			self.log.write(self.nec_file.formatName("Score")+"\t"+"\t".join(map(self.nec_file.formatName, self.opt_vars))+"\n")
+
 	def __del__(self):
 		if self.log:
 			self.log.close()
@@ -91,7 +103,7 @@ class NecFileEvaluator:
 			var = self.opt_vars[i]
 			self.nec_file.vars[var]=vector[i]
 		self.nec_file.writeNecInput("final.nec")
-		self.nec_file.evaluate(self.ranges, self.ncores,cleanup=1)
+		self.nec_file.evaluate(self.ranges, self.char_impedance, self.ncores,cleanup=1)
 
 	def target(self, vector):
 		class RangeResult:
@@ -124,7 +136,7 @@ class NecFileEvaluator:
 		NOP = ne.NecOutputParser
 		try:
 			for r in results:
-				nop = NOP(r)
+				nop = NOP(r, self.char_impedance)
 				for freq in nop.frequencies:
 					freqid = self.freqID(freq.freq)
 					tl = self.targetLevel(freqid[0], freqid[1])
@@ -167,16 +179,14 @@ class NecFileEvaluator:
 		except:
 			res = -1000
 		if res == -1000:
-			res = 1000
+			res = 1000.0
 			
 		print "\t".join(map(self.nec_file.formatName, self.opt_vars))
 		print "\t".join(map(self.nec_file.formatNumber, vector))
 		print res
 		print "\n"
 		if self.log:
-			self.log.write("\t".join(map(self.nec_file.formatName, self.opt_vars))+"\n")
-			self.log.write("\t".join(map(self.nec_file.formatNumber, vector))+"\n")
-			self.log.write("Score = "+str(res)+"\n")
+			self.log.write(self.nec_file.formatNumber(res)+"\t"+"\t".join(map(self.nec_file.formatNumber, vector))+"\n")
 		return res
 
 	def print_status(self, minv, meanv, vector, count):
@@ -198,7 +208,7 @@ def optionsParser():
 			self.add_option("-L", "--local-search", action="store_true", default = False)
 			self.add_option("-T", "--local-search-tolerance", default = .001)
 			self.add_option("-F", "--target-function", default = "max(max_gain_diff, max_swr_diff)", type='string', help="The evaluator calculates net gain and swr for each frequency of every sweep range. The optimizer then finds the difference between the gain and its target level and between the swr and its target level, thus calculating 'gain_diff' and 'swr_diff' for each frequency. As a second step it calculates the maximum and the average of those values for each sweep range: 'max_gain_diff', 'ave_gain_diff', 'max_swr_diff', 'ave_swr_diff'. Lastly it uses those value for every range and calculates the following values: 'max_gain_diff' - the absolute maximum of all gain_diffs for all frequencies, 'max_ave_gain_diff' - the maximum of all ave_gain_diffs for all sweep ranges, 'ave_max_gain_diff' - the average of all max_gain_diffs for all sweep ranges, 'ave_gain_diff' the average of all gain_diffs and the four swr counterparts 'max_swr_diff', 'max_ave_swr_diff', 'ave_max_swr_diff', 'ave_swr_diff'. The target function that the optimizer minimizes can be an expression of the last 8 values, by default it is '%default'")
-			self.add_option( "--swr-target", default = 2.0, type='float')
+			self.add_option( "--swr-target", default = 2.0, type='float', help="the default value is %default")
 			
 		def parse_args(self):
 			options, args = ne.OptionParser.parse_args(self)
@@ -231,7 +241,7 @@ def main():
 	else:
 		from scipy import optimize
 		print "N=%d"%len(evaluator.x)
-		evaluator.x = optimize.fmin(evaluator.target, evaluator.x, ftol=options.local_search_tolerance)
+		evaluator.x = optimize.fmin(evaluator.target, evaluator.x, ftol=options.local_search_tolerance, maxiter=options.max_iter)
 	#evaluator.nec_file.writeNecInput("final.nec")
 	evaluator.evaluateFinalSolution()
 
