@@ -14,6 +14,7 @@ class NecFileEvaluator:
 		self.char_impedance = options.char_impedance
 		self.nec_file = ne.NecFileObject(options.input, options.output)
 		self.nec_file.autoSegmentation(options.auto_segmentation)
+		self.output_population = options.output_population
 		
 		self.ranges = options.sweeps
 		self.target_levels = options.target_levels
@@ -104,6 +105,16 @@ class NecFileEvaluator:
 			self.nec_file.vars[var]=vector[i]
 		self.nec_file.writeNecInput("final.nec")
 		self.nec_file.evaluate(self.ranges, self.char_impedance, self.ncores,cleanup=1)
+	
+	def iterationCallback(self, iter_no, population, scores):
+		if not self.log or not self.output_population: return
+		self.log.write("-------------------------Population on Iteration # %d-------------------------\n"%iter_no)
+		for i in range(len(population)):
+			self.logParamVector(self.tanhTransform(population[i]), scores[i])
+		self.log.write("--------------------------------------------------------------------------------\n")
+
+	def logParamVector(self, vector, score):
+		self.log.write(self.nec_file.formatNumber(score)+"\t"+"\t".join(map(self.nec_file.formatNumber, vector))+"\n")
 
 	def target(self, vector):
 		class RangeResult:
@@ -186,7 +197,8 @@ class NecFileEvaluator:
 		print res
 		print "\n"
 		if self.log:
-			self.log.write(self.nec_file.formatNumber(res)+"\t"+"\t".join(map(self.nec_file.formatNumber, vector))+"\n")
+			self.logParamVector(vector,res)
+#			self.log.write(self.nec_file.formatNumber(res)+"\t"+"\t".join(map(self.nec_file.formatNumber, vector))+"\n")
 		return res
 
 	def print_status(self, minv, meanv, vector, count):
@@ -209,13 +221,21 @@ def optionsParser():
 			self.add_option("-T", "--local-search-tolerance", default = .001)
 			self.add_option("-F", "--target-function", default = "max(max_gain_diff, max_swr_diff)", type='string', help="The evaluator calculates net gain and swr for each frequency of every sweep range. The optimizer then finds the difference between the gain and its target level and between the swr and its target level, thus calculating 'gain_diff' and 'swr_diff' for each frequency. As a second step it calculates the maximum and the average of those values for each sweep range: 'max_gain_diff', 'ave_gain_diff', 'max_swr_diff', 'ave_swr_diff'. Lastly it uses those value for every range and calculates the following values: 'max_gain_diff' - the absolute maximum of all gain_diffs for all frequencies, 'max_ave_gain_diff' - the maximum of all ave_gain_diffs for all sweep ranges, 'ave_max_gain_diff' - the average of all max_gain_diffs for all sweep ranges, 'ave_gain_diff' the average of all gain_diffs and the four swr counterparts 'max_swr_diff', 'max_ave_swr_diff', 'ave_max_swr_diff', 'ave_swr_diff'. The target function that the optimizer minimizes can be an expression of the last 8 values, by default it is '%default'")
 			self.add_option( "--swr-target", default = 2.0, type='float', help="the default value is %default")
+			self.add_option( "--desqi", default = False, action="store_true")
+#			self.add_option( "--nmde", default = False, action="store_true")
+			self.add_option( "--de-f", default = 0.8, type="float")
+			self.add_option( "--de-cr", default = 0.9, type="float")
+			self.add_option( "--de-np", default = 50, type="int")
+			self.add_option("-P", "--output_population", default = False, action="store_true")
+
 			
 		def parse_args(self):
 			options, args = ne.OptionParser.parse_args(self)
 			if options.target_levels: options.target_levels = map(eval, options.target_levels)
 			if not options.sweeps:
-				options.sweeps = [(174,6,8),(470,6,40)]
-				options.target_levels = [(8.9,9.6,8.5, 8.2), (13.0,13.2,13.4,13.0)]
+				options.sweeps = [(470,6,40)]
+				options.target_levels = [(10.,10.)]
+				options.target_function = "max_gain_diff"
 				print "No sweeps parameters specified"
 			print "Sweeps set to:"
 			print options.sweeps
@@ -237,11 +257,17 @@ def main():
 	if options.seed_with_input:
 		ins_sol_vec = evaluator.x
 	if not options.local_search:
-		optimiser = DE.differential_evolution_optimizer(evaluator, show_progress=1, insert_solution_vector=ins_sol_vec, max_iter=options.max_iter)
+		de_plugin = None
+		if options.desqi:
+			de_plugin = DE.DESQIPlugin()
+		elif options.nmde:
+			de_plugin = DE.SimplexPlugin()
+		optimiser = DE.differential_evolution_optimizer(evaluator, population_size = options.de_np, f = options.de_f, cr = options.de_cr, show_progress=1, insert_solution_vector=ins_sol_vec, max_iter=options.max_iter, plugin = de_plugin)
 	else:
-		from scipy import optimize
+		#from scipy import optimize
+		import simplex
 		print "N=%d"%len(evaluator.x)
-		evaluator.x = optimize.fmin(evaluator.target, evaluator.x, ftol=options.local_search_tolerance, maxiter=options.max_iter)
+		evaluator.x = simplex.fmin(evaluator.target, evaluator.x, ftol=options.local_search_tolerance, xtol=options.local_search_tolerance, maxiter=options.max_iter)
 	#evaluator.nec_file.writeNecInput("final.nec")
 	evaluator.evaluateFinalSolution()
 

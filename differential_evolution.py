@@ -55,39 +55,12 @@ derivative works thereof, in binary and source code form.
 import random
 from itertools import imap
 import operator
+from demathutils import *
 
-def min_index(seq):
-	res = 0
-	for i in xrange(len(seq)):
-		if seq[i]<seq[res]:
-			res = i
-	return res
-
-def mean_value(seq):
-	res = seq[0]
-	for i in xrange(1, len(seq)):
-		res = res+seq[i]
-	return res / len(seq)
-
-def min_value(seq):
-	return seq[min_index(seq)]
-
-def random_double(size):
-	res = size*[.0]
-	for i in range(size):
-		res[i] = random.random()
-	return res
-
-def sort_permutation(seq):
-	tmp = zip(seq,xrange(len(seq)))
-	s = sorted(tmp, lambda x,y: cmp(x[0],y[0]))
-	res = []
-	for i in s: res.append(i[1])
-	return res
-	
+  
 def applyDeltaAndOffset(seq, delta, offset):
-	for i in range(len(seq)):
-		seq[i] = seq[i]*delta+offset
+  for i in range(len(seq)):
+    seq[i] = seq[i]*delta+offset
 
 class differential_evolution_optimizer(object):
   """
@@ -141,7 +114,8 @@ data members:
                out=None,
                show_progress=False,
                show_progress_nth_cycle=1,
-               insert_solution_vector=None):
+               insert_solution_vector=None,
+         plugin = None):
     self.show_progress=show_progress
     self.show_progress_nth_cycle=show_progress_nth_cycle
     self.evaluator = evaluator
@@ -155,6 +129,7 @@ data members:
     self.eps = eps
     self.population = []
     self.seeded = False
+    self.plugin = plugin
     if insert_solution_vector is not None:
       assert len( insert_solution_vector )==self.vector_length
       self.seeded = insert_solution_vector
@@ -185,6 +160,7 @@ data members:
     count = 0
     while not converged:
       self.evolve()
+      self.evaluator.iterationCallback(count, self.population, self.scores)
       location = min_index( self.scores )
       if self.show_progress:
         if count%self.show_progress_nth_cycle==0:
@@ -266,7 +242,14 @@ data members:
       if test_score < self.scores[ii] :
         self.scores[ii] = test_score
         self.population[ii] = test_vector
-
+    if self.plugin:
+      print "Postevolving ..."
+      res = self.plugin.postEvolve(self)
+      if res:
+        for r in res:
+          print "Plugin improved member %d from %g to %g"%(r[0], self.scores[r[0]], r[2])
+          self.population[r[0]] = r[1]
+          self.scores[r[0]] = r[2]
 
   def show_population(self):
     print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
@@ -275,4 +258,105 @@ data members:
     print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 
 
+class DESQIPlugin:
+  def __init__(self, maxN=3):
+    self.maxN = maxN
+  
+  def postEvolve(self, de):
+    b = min_index(de.scores)
+    w = max_index(de.scores)
+    for k in range(self.maxN):
+      rnd = random_double(de.population_size-1)
+      permut = sort_permutation(rnd)
+      # make parent indices
+      i1 = b
+      i2=permut[0]
+      if (i2>=i1):
+        i2+=1
+      i3=permut[1]
+      if (i3>=i1):
+        i3+=1
+      test_vector = list(de.population[w])
+      x1 = de.population[i1]
+      x2 = de.population[i2]
+      x3 = de.population[i3]
+      f1 = de.scores[i1]
+      f2 = de.scores[i2]
+      f3 = de.scores[i3]
+      for i in xrange(de.vector_length):
+        test_vector[i] = .5*( (x1[i]*x1[i]-x2[i]*x2[i])*f3 + (x2[i]*x2[i] - x3[i]*x3[i])*f1 + (x3[i]*x3[i] - x1[i]*x1[i])*f2) / ( (x1[i]-x2[i])*f1 + (x2[i] - x3[i])*f1 + (x3[i] - x1[i])*f2)
+      test_score = de.evaluator.target( test_vector )
+      if test_score < de.scores[w]:
+        return [(w, test_vector, test_score)]
+    return None
+    
 
+class SimplexPlugin:
+  def __init__(self, rho = 1, chi = 1.5,  psi = 0.5, sigma = 0.5):
+    self.rho = rho
+    self.chi = chi
+    self.psi = psi
+    self.sigma = sigma
+
+  def postEvolve(self, de):
+    ind = sort_permutation(de.scores)
+    de.scores = apply_permutation(de.scores, ind)
+    de.population= apply_permutation(de.population, ind)
+    res = []
+
+    sim = de.population
+    fsim = de.scores
+    func = de.evaluator.target
+    N = de.vector_length
+
+    rho = self.rho
+    chi = self.chi
+    psi = self.psi
+    sigma = self.sigma
+
+    xbar = averageArrays(apply_permutation(sim, ind)[0:N])
+
+    for i in range(N, de.population_size):
+        xr = linearCombine((1+rho),xbar, - rho,sim[ind[i]])
+        fxr = func(xr)
+        doshrink = 0
+
+        if fxr < fsim[ind[0]]:
+            xe = linearCombine((1+rho*chi),xbar, - rho*chi,sim[ind[i]])
+            fxe = func(xe)
+
+            if fxe < fxr:
+                res.append((ind[i],xe,fxe))
+            else:
+                res.append((ind[i],xr,fxr))
+        else: # fsim[0] <= fxr
+            if fxr < fsim[ind[N-1]]:
+                res.append((ind[i],xr,fxr))
+            else: # fxr >= fsim[-2]
+                # Perform contraction
+                if fxr < fsim[ind[i]]:
+                    xc = linearCombine((1+psi*rho),xbar, - psi*rho,sim[ind[i]])
+                    fxc = func(xc)
+
+                    if fxc <= fxr:
+                        res.append((ind[i],xc,fxc))
+                    else:
+                        doshrink=1
+                else:
+                    # Perform an inside contraction
+                    xcc = linearCombine((1-psi),xbar,  psi,sim[ind[i]])
+                    fxcc = func(xcc)
+
+                    if fxcc < fsim[ind[i]]:
+                        res.append((ind[i],xcc,fxcc))
+                    else:
+                        doshrink = 1
+
+                if doshrink:
+                    xs = linearCombine((1-sigma),sim[ind[0]] , sigma,sim[ind[i]])
+                    fxs = func(xs)
+                    if fxs < fsim[ind[i]]:
+                        res.append((ind[i],xs,fxs))
+                    
+    return res
+        
