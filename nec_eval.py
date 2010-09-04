@@ -1,10 +1,13 @@
 # Copyright 2010 Nikolay Mladenov, Distributed under 
 # GNU General Public License
 
+import math
+
 output = "output"
 input = "input.nec"
 autosegmentation=10
 ncores=4
+
 	
 
 class FrequencyData:
@@ -15,7 +18,6 @@ class FrequencyData:
 		self.gain = 0
 		self.char_imp = char_imp
 	def swr(self):
-		import math
 		rc = math.sqrt( \
 			(math.pow(self.real-self.char_imp,2)+math.pow(self.imag,2)) \
 			/ (math.pow(self.real+self.char_imp,2)+math.pow(self.imag,2)) \
@@ -28,7 +30,6 @@ class FrequencyData:
 		except:
 			return 0
 	def net(self):
-		import math
 		tmp = 4*max(self.real,.0001)*self.char_imp/(math.pow(self.real+self.char_imp,2)+math.pow(self.imag,2))
 		return self.gain+10*math.log10(tmp)
 		
@@ -141,7 +142,6 @@ class NecFileObject:
 			self.vars[i]=float(self.vars[i])
 
 	def calcLength(self, line):
-		import math
 		return self.scale*math.sqrt(math.pow(line[2]-line[5],2)+math.pow(line[3]-line[6],2)+math.pow(line[4]-line[7],2))
 
 	def autoSegment(self, line):
@@ -166,7 +166,7 @@ class NecFileObject:
 		finally: file.close()
 	
 	def evalToken(self, x):
-		return eval(x, self.globals)
+		return eval(x, math.__dict__,self.globals)
 
 	def formatNumber(self, n):
 		if type(n) == type(.1):
@@ -182,7 +182,7 @@ class NecFileObject:
 		self.globals={}
 		self.globals.update(self.vars)
 		for d in self.dependent_vars:
-			try: exec(d, {}, self.globals)
+			try: exec(d, math.__dict__, self.globals)
 			except:
 				print "failed parsing '%s'"%(d)
 				raise
