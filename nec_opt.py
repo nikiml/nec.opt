@@ -98,12 +98,14 @@ class NecFileEvaluator:
 
 		raise "frequence %.3f out of all ranges"%freq
 
-	def evaluateFinalSolution(self):
+	def evaluateFinalSolution(self, interrupted=0):
 		vector = self.tanhTransform(self.x)
 		for i in xrange(len(self.opt_vars)):
 			var = self.opt_vars[i]
 			self.nec_file.vars[var]=vector[i]
 		self.nec_file.writeNecInput("final.nec")
+		self.nec_file.writeParametrized("output.nec")
+		if interrupted: return
 		self.nec_file.evaluate(self.ranges, self.char_impedance, self.ncores,cleanup=1)
 	
 	def iterationCallback(self, iter_no, population, scores):
@@ -223,7 +225,7 @@ def optionsParser():
 			self.add_option( "--swr-target", default = 2.0, type='float', help="the default value is %default")
 			self.add_option( "--desqi", default = False, action="store_true")
 #			self.add_option( "--nmde", default = False, action="store_true")
-			self.add_option( "--de-f", default = 0.8, type="float")
+			self.add_option( "--de-f", default = 0.6, type="float")
 			self.add_option( "--de-cr", default = 0.9, type="float")
 			self.add_option( "--de-np", default = 50, type="int")
 			self.add_option("-P", "--output_population", default = False, action="store_true")
@@ -256,20 +258,22 @@ def main():
 	ins_sol_vec = None
 	if options.seed_with_input:
 		ins_sol_vec = evaluator.x
-	if not options.local_search:
-		de_plugin = None
-		if options.desqi:
-			de_plugin = DE.DESQIPlugin()
-		elif options.nmde:
-			de_plugin = DE.SimplexPlugin()
-		optimiser = DE.differential_evolution_optimizer(evaluator, population_size = options.de_np, f = options.de_f, cr = options.de_cr, show_progress=1, insert_solution_vector=ins_sol_vec, max_iter=options.max_iter, plugin = de_plugin)
-	else:
-		#from scipy import optimize
-		import simplex
-		print "N=%d"%len(evaluator.x)
-		evaluator.x = simplex.fmin(evaluator.target, evaluator.x, ftol=options.local_search_tolerance, xtol=options.local_search_tolerance, maxiter=options.max_iter)
-	#evaluator.nec_file.writeNecInput("final.nec")
-	evaluator.evaluateFinalSolution()
+	try:
+		if not options.local_search:
+			de_plugin = None
+			if options.desqi:
+				de_plugin = DE.DESQIPlugin()
+			optimiser = DE.differential_evolution_optimizer(evaluator, population_size = options.de_np, f = options.de_f, cr = options.de_cr, show_progress=1, insert_solution_vector=ins_sol_vec, max_iter=options.max_iter, plugin = de_plugin)
+		else:
+			#from scipy import optimize
+			import simplex
+			print "N=%d"%len(evaluator.x)
+			evaluator.x = simplex.fmin(evaluator, ftol=options.local_search_tolerance, xtol=options.local_search_tolerance, maxiter=options.max_iter)
+		#evaluator.nec_file.writeNecInput("final.nec")
+		evaluator.evaluateFinalSolution()
+	except KeyboardInterrupt:
+		evaluator.evaluateFinalSolution(1)
+		raise
 
 
 if __name__ == "__main__": 

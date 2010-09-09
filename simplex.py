@@ -9,7 +9,7 @@ def wrap_function(function):
     return ncalls, function_wrapper
 
 
-def fmin(func, x0, xtol=1e-4, ftol=1e-4, maxiter=None, maxfun=None,
+def fmin(evaluator, xtol=1e-4, ftol=1e-4, maxiter=None, maxfun=None,
          full_output=0, disp=1, callback=None):
     """Minimize a function using the downhill simplex algorithm.
 
@@ -62,7 +62,8 @@ def fmin(func, x0, xtol=1e-4, ftol=1e-4, maxiter=None, maxfun=None,
     a function of one or more variables.
 
     """
-    fcalls, func = wrap_function(func)
+    fcalls, func = wrap_function(evaluator.target)
+    x0 = evaluator.x
     #x0 = asfarray(x0).flatten()
     N = len(x0)
     if maxiter is None:
@@ -98,6 +99,7 @@ def fmin(func, x0, xtol=1e-4, ftol=1e-4, maxiter=None, maxfun=None,
     fsim = apply_permutation(fsim,ind)
     # sort so sim[0,:] has the lowest function value
     sim = apply_permutation(sim,ind)
+    evaluator.x = sim[0]
 
     iterations = 1
 
@@ -159,6 +161,7 @@ def fmin(func, x0, xtol=1e-4, ftol=1e-4, maxiter=None, maxfun=None,
         ind = sort_permutation(fsim)
         sim = apply_permutation(sim,ind)
         fsim = apply_permutation(fsim,ind)
+        evaluator.x = sim[0]
         if callback is not None:
             callback(sim[0])
         iterations += 1

@@ -91,6 +91,7 @@ class NecFileObject:
 		self.dependent_vars = []
 		self.lines=[]
 		self.varlines=[]
+		self.paramlines={}
 		self.source_tags={}
 		self.autosegment=(0,0)
 		self.frequency = 585
@@ -114,7 +115,8 @@ class NecFileObject:
 		self.dependent_vars = []
 		self.varlines=[]
 		self.source_tags={}
-		for ln in self.lines:
+		for i in xrange(len(self.lines)):
+			ln = self.lines[i]
 			comment = ln[ln.find("'")+1:]
 			ln = ln[0:ln.find("'")].strip(' ')
 			if ln[0:2]== "SY":
@@ -122,6 +124,7 @@ class NecFileObject:
 					d = {}
 					exec(ln[3:].strip(), {}, d)
 					self.vars.update(d)
+					self.paramlines[d.keys()[0]]=i
 					try:
 						min, max = eval(comment)
 						self.min_max[d.keys()[0]]=(float(min),float(max))
@@ -132,11 +135,11 @@ class NecFileObject:
 			else:
 				self.varlines.append(ln.replace(',',' ').split())
 				if ln[0:2]=="EX":
-					self.source_tags[int(self.varlines[-1][2])]=len(self.varlines)-1
+					self.source_tags[int(self.varlines[-1][2])]=(len(self.varlines)-1,i)
 				elif ln[0:2] == "FR":
 					self.frequency = float(self.varlines[-1][5])
 				elif ln[0:2] == "GS":
-					self.scale = float(self.varlines[-1][2])
+					self.scale = float(self.varlines[-1][3])
 
 		for i in self.vars.keys():
 			self.vars[i]=float(self.vars[i])
@@ -151,7 +154,8 @@ class NecFileObject:
 			line[1]=line[1]+2
 			if line[1] % 2 == 0:
 				line[1]=line[1]+1
-			self.varlines[self.source_tags[line[0]]][3] = str(int(line[1]/2)+1)
+			self.varlines[self.source_tags[line[0]][0]][3] = str(int(line[1]/2)+1)
+			self.lines[self.source_tags[line[0]][1]] = " ".join(self.varlines[self.source_tags[line[0]][0]])
 		
 
 	def autoSegmentation(self, segs_per_halfwave=0, freq = None):
@@ -202,6 +206,37 @@ class NecFileObject:
 		lines.extend(extralines)
 		file = open(filename, "wt")
 		try: file.write("\n".join(lines))
+		finally: file.close()
+	def writeParametrized(self, filename, extralines=[], skiptags=[]):
+		lines=[]
+		self.globals={}
+		self.globals.update(self.vars)
+		for v in self.vars.keys():
+			lno = self.paramlines[v]
+			if v in self.min_max.keys():
+				self.lines[lno] = "SY %s=%.7g ' %g, %g" %(v, self.vars[v], self.min_max[v][0], self.min_max[v][1])
+			else:
+				self.lines[lno] = "SY %s=%.7g" %(v, self.vars[v])
+		for d in self.dependent_vars:
+			try: exec(d, math.__dict__, self.globals)
+			except:
+				print "failed parsing '%s'"%(d)
+				raise
+		for ln in self.lines:
+			sl = ln.replace(',',' ').split()
+			if not sl or not self.autosegment[0] or sl[0].strip() != "GW" : 
+				lines.append(ln.strip())
+				continue
+			if sl[0].strip() == "GW":
+				sline = map( self.evalToken , sl[1:])
+				self.autoSegment(sline)
+				sl[2] = str(sline[1])
+				lines.append(" ".join(sl))
+
+		del self.globals
+		lines.extend(extralines)
+		file = open(filename, "wt")
+		try: file.write("\n".join(lines)+"\n")
 		finally: file.close()
 	def writeFreqSweep(self, filename, sweep):
 		lines = []
@@ -382,14 +417,22 @@ def optionParser():
 	return MainOptionParser()
 
 
-
-def main():
-#default values
-	options, args = optionParser().parse_args()
+def run(options):
 	nf = NecFileObject(options.input, options.output, options.engine)
 	nf.autoSegmentation(options.auto_segmentation)
 	nf.evaluate(options.sweeps, options.char_impedance, options.num_cores)
 
+def main():
+#default values
+	options, args = optionParser().parse_args()
+	run(options)
+	for inp in args:
+		if i[0]!="-":
+			options.input = i
+			try:
+				run(options)
+			except:
+				pass
 	
 
 

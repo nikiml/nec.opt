@@ -250,6 +250,9 @@ data members:
           print "Plugin improved member %d from %g to %g"%(r[0], self.scores[r[0]], r[2])
           self.population[r[0]] = r[1]
           self.scores[r[0]] = r[2]
+    self.best_score = min_value( self.scores )
+    self.best_vector = self.population[ min_index( self.scores ) ]
+    self.evaluator.x = self.best_vector
 
   def show_population(self):
     print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
