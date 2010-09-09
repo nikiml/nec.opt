@@ -59,13 +59,14 @@ class NecOutputParser:
 					print "%6.4g % 7.5g % 7.5g %7.5g %7.5g % 7.5g"%(int(i.freq), i.gain, i.net(),i.swr(), i.real, i.imag)
 		else:
 			if header: 
-				print "%6s %6s %7s %7s %7s %7s %7s"%("Freq", "Angle", "RawGain", "NetGain", "SWR", "Real", "Imag")
+				print "%6s %7s %6s %7s %7s %7s %7s %7s %7s"%("Freq", "Target", "Angle", "RawGain", "NetGain", "SWR", "Real", "Imag", "Diff")
 				print "======================================================"
 			for i in self.frequencies:
 				if not i.valid():
 					print "%6.4g - invalid result"%i.freq
 				else:
-					print "%6.4g %6.2g % 7.5g % 7.5g %7.5g %7.5g % 7.5g"%(int(i.freq), i.angle, i.gain, i.net(),i.swr(), i.real, i.imag)
+					target = self.frequency_angle_data[i.freq][1]
+					print "%6.4g %6.2g %6.2g % 7.5g % 7.5g %7.5g %7.5g % 7.5g % 7.5g"%(int(i.freq), target, i.angle, i.gain, i.net(),i.swr(), i.real, i.imag, target-i.net())
 
 	def parse(self, output):
 		file = open(output, "rt")
@@ -176,8 +177,8 @@ class NecFileObject:
 		return self.scale*math.sqrt(math.pow(line[2]-line[5],2)+math.pow(line[3]-line[6],2)+math.pow(line[4]-line[7],2))
 
 	def autoSegment(self, line):
-		nsegs = self.calcLength(line)/self.autosegment[1]*self.autosegment[0]
-		line[1] = int(nsegs+.5)
+		nsegs = self.calcLength(line)*self.autosegment[0]/self.autosegment[1]
+		line[1] = max(int(nsegs+.5),1)
 		if line[0] in self.source_tags:
 			line[1]=line[1]+2
 			if line[1] % 2 == 0:
