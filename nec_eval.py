@@ -17,6 +17,7 @@ class FrequencyData:
 		self.imag = 0
 		self.gain = 0
 		self.char_imp = char_imp
+		self.angle = 0
 	def swr(self):
 		rc = math.sqrt( \
 			(math.pow(self.real-self.char_imp,2)+math.pow(self.imag,2)) \
@@ -38,21 +39,33 @@ class FrequencyData:
 
 
 class NecOutputParser:
-	def __init__(self, output, char_imp = 300):
+	def __init__(self, output, char_imp = 300, angle_step = 5, frequency_angle_data={}):
 		self.frequencies = []
 		self.char_imp = char_imp
+		self.frequency_angle_data=frequency_angle_data
+		self.angle_step = angle_step
 		if output:
 			self.parse(output)
 
 	def printFreqs(self, header=1):
-		if header: 
-			print "%6s %7s %7s %7s %7s %7s"%("Freq", "RawGain", "NetGain", "SWR", "Real", "Imag")
-			print "================================================"
-		for i in self.frequencies:
-			if not i.valid():
-				print "%6.4g - invalid result"%i.freq
-			else:
-				print "%6.4g %7.6g %7.6g %7.6g %7.6g % 7.6g"%(int(i.freq), i.gain, i.net(),i.swr(), i.real, i.imag)
+		if not self.frequency_angle_data:
+			if header: 
+				print "%6s %7s %7s %7s %7s %7s"%("Freq", "RawGain", "NetGain", "SWR", "Real", "Imag")
+				print "================================================"
+			for i in self.frequencies:
+				if not i.valid():
+					print "%6.4g - invalid result"%i.freq
+				else:
+					print "%6.4g % 7.5g % 7.5g %7.5g %7.5g % 7.5g"%(int(i.freq), i.gain, i.net(),i.swr(), i.real, i.imag)
+		else:
+			if header: 
+				print "%6s %6s %7s %7s %7s %7s %7s"%("Freq", "Angle", "RawGain", "NetGain", "SWR", "Real", "Imag")
+				print "======================================================"
+			for i in self.frequencies:
+				if not i.valid():
+					print "%6.4g - invalid result"%i.freq
+				else:
+					print "%6.4g %6.2g % 7.5g % 7.5g %7.5g %7.5g % 7.5g"%(int(i.freq), i.angle, i.gain, i.net(),i.swr(), i.real, i.imag)
 
 	def parse(self, output):
 		file = open(output, "rt")
@@ -75,15 +88,27 @@ class NecOutputParser:
 				self.frequencies[-1].imag = float(lines[i][72:84])
 			elif ln =="- - - RADIATION PATTERNS - - -":
 				i=i+5
+				angle = 0
+				freq = self.frequencies[-1].freq
+				if freq in self.frequency_angle_data.keys():
+					angle = self.frequency_angle_data[freq][0]
 				while len(lines[i].strip()):
 					ln = lines[i]
 					theta = float(ln[0:8])
 					phi = float(ln[8:17])
-					if theta==90 and phi==0:
+					if theta==90 and abs(phi-angle)<=self.angle_step*.5:
 						self.frequencies[-1].gain = float(ln[28:36])
+						self.frequencies[-1].angle = angle
 						break
 					i = i+1
 			i = i+1
+		if self.frequency_angle_data:
+			freqs = []
+			for f in self.frequencies:
+				if f.freq in self.frequency_angle_data.keys():
+					freqs.append(f)
+			self.frequencies = freqs
+
 class NecFileObject:
 	def __init__(self, sourcefile=None, output="output", engine="nec2dxs1k5.exe"):
 		self.vars = {}
@@ -99,6 +124,7 @@ class NecFileObject:
 		self.engine = engine
 		self.sourcefile = sourcefile
 		self.scale = 1
+		self.angle_step = 5
 		if sourcefile:
 			self.readSource(sourcefile)
 
@@ -140,6 +166,8 @@ class NecFileObject:
 					self.frequency = float(self.varlines[-1][5])
 				elif ln[0:2] == "GS":
 					self.scale = float(self.varlines[-1][3])
+				elif ln[0:2] == "RP":
+					self.angle_Step = float(self.varlines[-1][8])
 
 		for i in self.vars.keys():
 			self.vars[i]=float(self.vars[i])
@@ -243,7 +271,7 @@ class NecFileObject:
 		#lines.append("FR 0 1 0 0 %g 0"%sweep[0])
 		#lines.append("XQ")
 		lines.append("FR 0 %d 0 0 %g %g"%(sweep[2],sweep[0],sweep[1]))
-		lines.append("RP 0 1 73 1000 90 0 0 5")
+		lines.append("RP 0 1 73 1000 90 0 0 %d"%self.angle_step)
 		lines.append("XQ")
 		self.writeNecInput(filename, lines, ["FR", "XQ", "RP", "EN"])
 	
@@ -302,6 +330,7 @@ class NecFileObject:
 						pass
 			except:
 				pass
+
 		total_freqs = 0
 		for i in sweeps:
 			total_freqs = total_freqs+i[2]
@@ -316,6 +345,7 @@ class NecFileObject:
 					cores_per_sweep[i] =  1 
 					total_freqs = total_freqs - sweeps[i][2]
 					num_cores = num_cores-1
+					if not num_cores: break
 				else:
 					cores_per_sweep[i] = 0 
 		
@@ -330,7 +360,8 @@ class NecFileObject:
 					cores_per_sweep[i] =  int(sweeps[i][2]/freqs_per_core) 
 				break
 			freqs_per_core = total_freqs/num_cores
-			
+
+		
 		results={}
 		number=0
 		from threading import Lock, Thread
@@ -357,7 +388,7 @@ class NecFileObject:
 			r.append(results[i])
 		return r
 
-	def evaluate(self, sweeps, char_impedance, num_cores=1, cleanup=0):
+	def evaluate(self, sweeps, char_impedance, num_cores=1, cleanup=0, frequency_data = {}):
 		NOP = NecOutputParser 
 		results = self.runSweeps(sorted(sweeps), num_cores, cleanup) #[[174,6,8],[470,6,40]]
 		print "Input file : %s"%self.sourcefile 
@@ -369,7 +400,7 @@ class NecFileObject:
 		print "\n"
 	
 		for r in range(len(results)):
-			nop = NOP(results[r], char_impedance)
+			nop = NOP(results[r], char_impedance, self.angle_step, frequency_data)
 			nop.printFreqs(r==0)
 
 
@@ -405,8 +436,10 @@ def optionParser():
 		def __init__(self):
 			OptionParser.__init__(self)
 			self.add_option("-c", "--centers", default=True, help="run sweep on the channel centers",action="store_false", dest="ends")
+			self.add_option("-f", "--frequency_data", default = "{}", help="a map of frequency to (angle, expected_gain) tuple" )
 		def parse_args(self):
 			options, args = OptionParser.parse_args(self)
+			options.frequency_data = eval(options.frequency_data)
 			if not options.sweeps:
 				options.sweeps = [(470,6,40)]
 			if not options.ends:
@@ -420,15 +453,15 @@ def optionParser():
 def run(options):
 	nf = NecFileObject(options.input, options.output, options.engine)
 	nf.autoSegmentation(options.auto_segmentation)
-	nf.evaluate(options.sweeps, options.char_impedance, options.num_cores)
+	nf.evaluate(options.sweeps, options.char_impedance, options.num_cores, 0, options.frequency_data)
 
 def main():
 #default values
 	options, args = optionParser().parse_args()
 	run(options)
 	for inp in args:
-		if i[0]!="-":
-			options.input = i
+		if inp[0]!="-":
+			options.input = inp
 			try:
 				run(options)
 			except:

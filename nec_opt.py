@@ -24,6 +24,7 @@ class NecFileEvaluator:
 		self.domain = len(self.nec_file.min_max.values())*[[-1,1]]
 		self.n = len(self.opt_vars)
 		self.x = []
+		self.frequency_data = options.frequency_data
 		for i in xrange(len(self.opt_vars)):
 			var = self.opt_vars[i]
 			self.x.append(self.nec_file.vars[var])
@@ -37,12 +38,21 @@ class NecFileEvaluator:
 			self.log.write("Input file: "+options.input+"\n")
 			self.log.write("Sweep ranges: \n")
 			for i in range(len(self.ranges)):
-				self.log.write(str(self.ranges[i]) + " with target levels "+str(self.target_levels[i])+"\n")
+				self.log.write(str(self.ranges[i]))
+				if not self.frequency_data:
+					self.log.write(" with target levels "+str(self.target_levels[i])+"\n")
+				else:
+					self.log.write("\n")
+			if self.frequency_data:
+				self.log.write(" Frequency angle/gain data: \n")
+				self.log.write(str(self.frequency_data))
+				self.log.write("\n")
 			self.log.write("SWR target: %g\n"%self.swr_target+"\n")
 			self.log.write("Target function: %s\n"%self.target_function+"\n")
 			
 			self.log.write("============"*10+"\n")
 			self.log.write(self.nec_file.formatName("Score")+"\t"+"\t".join(map(self.nec_file.formatName, self.opt_vars))+"\n")
+			self.log.flush()
 
 	def __del__(self):
 		if self.log:
@@ -114,9 +124,11 @@ class NecFileEvaluator:
 		for i in range(len(population)):
 			self.logParamVector(self.tanhTransform(population[i]), scores[i])
 		self.log.write("--------------------------------------------------------------------------------\n")
+		self.log.flush()
 
 	def logParamVector(self, vector, score):
 		self.log.write(self.nec_file.formatNumber(score)+"\t"+"\t".join(map(self.nec_file.formatNumber, vector))+"\n")
+		self.log.flush()
 
 	def target(self, vector):
 		class RangeResult:
@@ -149,10 +161,14 @@ class NecFileEvaluator:
 		NOP = ne.NecOutputParser
 		try:
 			for r in results:
-				nop = NOP(r, self.char_impedance)
+				nop = NOP(r, self.char_impedance, self.nec_file.angle_step, self.frequency_data)
+				#print "output parsed"
 				for freq in nop.frequencies:
 					freqid = self.freqID(freq.freq)
-					tl = self.targetLevel(freqid[0], freqid[1])
+					if self.frequency_data:
+						tl = self.frequency_data[freq.freq][1]
+					else:
+						tl = self.targetLevel(freqid[0], freqid[1])
 					gain_diff = tl-freq.net()
 					swr_diff = (freq.swr() - self.swr_target)
 					#print "freq %g, target level %g, freqno %d, gaindiff %g, swrdiff %g"%(freq.freq, tl, freqid[0], gain_diff, swr_diff)
@@ -200,6 +216,7 @@ class NecFileEvaluator:
 		print "\n"
 		if self.log:
 			self.logParamVector(vector,res)
+			self.log.flush()
 #			self.log.write(self.nec_file.formatNumber(res)+"\t"+"\t".join(map(self.nec_file.formatNumber, vector))+"\n")
 		return res
 
@@ -229,11 +246,13 @@ def optionsParser():
 			self.add_option( "--de-cr", default = 0.9, type="float")
 			self.add_option( "--de-np", default = 50, type="int")
 			self.add_option("-P", "--output_population", default = False, action="store_true")
+			self.add_option("-f", "--frequency_data", default = "{}", help="a map of frequency to (angle, expected_gain) tuple" )
 
 			
 		def parse_args(self):
 			options, args = ne.OptionParser.parse_args(self)
 			if options.target_levels: options.target_levels = map(eval, options.target_levels)
+			options.frequency_data = eval(options.frequency_data)
 			if not options.sweeps:
 				options.sweeps = [(470,6,40)]
 				options.target_levels = [(10.,10.)]
