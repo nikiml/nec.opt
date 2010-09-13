@@ -4,7 +4,7 @@
 
 import differential_evolution as DE
 import os, math
-import nec_eval as ne
+from nec import eval as ne
 
 class NecFileEvaluator:
 	def __init__(self, options):
@@ -15,6 +15,7 @@ class NecFileEvaluator:
 		self.nec_file = ne.NecFileObject(options.input, options.output)
 		self.nec_file.autoSegmentation(options.auto_segmentation)
 		self.output_population = options.output_population
+		self.output_best = options.output_best
 		
 		self.ranges = options.sweeps
 		self.target_levels = options.target_levels
@@ -24,6 +25,7 @@ class NecFileEvaluator:
 		self.domain = len(self.nec_file.min_max.values())*[[-1,1]]
 		self.n = len(self.opt_vars)
 		self.x = []
+		self.best_score = 999.0
 		self.frequency_data = options.frequency_data
 		for i in xrange(len(self.opt_vars)):
 			var = self.opt_vars[i]
@@ -32,23 +34,25 @@ class NecFileEvaluator:
 		self.x = self.atanhTransform(self.x)
 
 		self.ncores = options.num_cores
+		self.comments = [""]
+		self.comments.append("Input file: "+options.input)
+		self.comments.append("Sweep ranges: ")
+		for i in range(len(self.ranges)):
+			self.comments.append(str(self.ranges[i]))
+			if not self.frequency_data:
+				self.comments[-1]+=(" with target levels "+str(self.target_levels[i]))
+		if self.frequency_data:
+			self.comments.append(" Frequency angle/gain data: ")
+			self.comments.append(str(self.frequency_data))
+		self.comments.append("SWR target: %g"%self.swr_target)
+		self.comments.append("Target function: %s"%self.target_function)
+		self.comments.append("")
+			
+
 		if options.log_file:
 			self.log = open(options.log_file,"at")
 			self.log.write("============"*10+"\n")
-			self.log.write("Input file: "+options.input+"\n")
-			self.log.write("Sweep ranges: \n")
-			for i in range(len(self.ranges)):
-				self.log.write(str(self.ranges[i]))
-				if not self.frequency_data:
-					self.log.write(" with target levels "+str(self.target_levels[i])+"\n")
-				else:
-					self.log.write("\n")
-			if self.frequency_data:
-				self.log.write(" Frequency angle/gain data: \n")
-				self.log.write(str(self.frequency_data))
-				self.log.write("\n")
-			self.log.write("SWR target: %g\n"%self.swr_target+"\n")
-			self.log.write("Target function: %s\n"%self.target_function+"\n")
+			self.log.write("\n".join(self.comments))
 			
 			self.log.write("============"*10+"\n")
 			self.log.write(self.nec_file.formatName("Score")+"\t"+"\t".join(map(self.nec_file.formatName, self.opt_vars))+"\n")
@@ -114,7 +118,7 @@ class NecFileEvaluator:
 			var = self.opt_vars[i]
 			self.nec_file.vars[var]=vector[i]
 		self.nec_file.writeNecInput("final.nec")
-		self.nec_file.writeParametrized("output.nec")
+		self.nec_file.writeParametrized("output.nec", comments = self.comments+["Score %g"%self.best_score,""])
 		if interrupted: return
 		self.nec_file.evaluate(self.ranges, self.char_impedance, self.ncores,cleanup=1)
 	
@@ -218,6 +222,16 @@ class NecFileEvaluator:
 			self.logParamVector(vector,res)
 			self.log.flush()
 #			self.log.write(self.nec_file.formatNumber(res)+"\t"+"\t".join(map(self.nec_file.formatNumber, vector))+"\n")
+
+		if res < self.best_score:
+			self.best_score = res
+			if self.output_best:
+				fn = ("best%.3f"%res)
+				fn = fn.replace(".-","-")
+				fn = fn.replace(".","_")
+				fn = fn+".nec"
+				self.nec_file.writeParametrized(fn, comments = self.comments+["Score %g"%res,""])
+
 		return res
 
 	def print_status(self, minv, meanv, vector, count):
@@ -247,12 +261,16 @@ def optionsParser():
 			self.add_option( "--de-np", default = 50, type="int")
 			self.add_option("-P", "--output_population", default = False, action="store_true")
 			self.add_option("-f", "--frequency_data", default = "{}", help="a map of frequency to (angle, expected_gain) tuple" )
+			self.add_option("-b", "--output-best", default = -1, help="set to 0 or 1 to output the best score nec file as 'best.nec'. Default is -1 (output if not in local search)." )
 
 			
 		def parse_args(self):
 			options, args = ne.OptionParser.parse_args(self)
 			if options.target_levels: options.target_levels = map(eval, options.target_levels)
 			options.frequency_data = eval(options.frequency_data)
+			if options.output_best == -1:
+				if options.local_search: options.output_best = 0
+				else: options.output_best = 1
 			if not options.sweeps:
 				options.sweeps = [(470,6,40)]
 				options.target_levels = [(10.,10.)]

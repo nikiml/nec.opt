@@ -236,7 +236,7 @@ class NecFileObject:
 		file = open(filename, "wt")
 		try: file.write("\n".join(lines))
 		finally: file.close()
-	def writeParametrized(self, filename, extralines=[], skiptags=[]):
+	def writeParametrized(self, filename, extralines=[], skiptags=[], comments=[]):
 		lines=[]
 		self.globals={}
 		self.globals.update(self.vars)
@@ -251,8 +251,11 @@ class NecFileObject:
 			except:
 				print "failed parsing '%s'"%(d)
 				raise
+		has_comments = 0
 		for ln in self.lines:
 			sl = ln.replace(',',' ').split()
+			if sl and sl[0].strip() == "CE":
+				has_comments=1
 			if not sl or not self.autosegment[0] or sl[0].strip() != "GW" : 
 				lines.append(ln.strip())
 				continue
@@ -265,7 +268,14 @@ class NecFileObject:
 		del self.globals
 		lines.extend(extralines)
 		file = open(filename, "wt")
-		try: file.write("\n".join(lines)+"\n")
+		try: 
+			if comments:
+				file.write("CM ")
+				file.write("\nCM ".join(comments))
+				file.write("\n")
+				if not has_comments:
+					file.write("CE\n")
+			file.write("\n".join(lines)+"\n")
 		finally: file.close()
 	def writeFreqSweep(self, filename, sweep):
 		lines = []
@@ -304,7 +314,7 @@ class NecFileObject:
 		f.write("\n")
 		f.close()
 		f = open(exe_input)
-		popen = sp.Popen("", executable=self.engine, stdin=f, stdout=open(os.devnull))
+		popen = sp.Popen(self.engine, stdin=f, stdout=open(os.devnull))
 		popen.wait()
 		f.close()
 		return nec_output
@@ -419,7 +429,7 @@ class OptionParser(optparse.OptionParser):
 		self.add_option("-v", "--vhf-lo", action="append_const", dest="sweeps", const="(54,6,6)", help="adds a vhf-lo (ch. 1-6) sweep")
 		self.add_option("-n", "--num-cores", type="int", default=ncores, help="number of cores to be used, default=%default")
 		self.add_option("-a", "--auto-segmentation", metavar="NUM_SEGMENTS", type="int", default=autosegmentation, help="autosegmentation level - set to 0 to turn autosegmentation off, default=%default")
-		self.add_option("-e", "--engine", metavar="NEC_ENGINE", default="./nec2dxs1k5.exe", help="nec engine file name, default=%default")
+		self.add_option("-e", "--engine", metavar="NEC_ENGINE", default="nec2dxs1k5.exe", help="nec engine file name, default=%default")
 	def parse_args(self):
 		options, args = optparse.OptionParser.parse_args(self)
 		if options.input == "":
