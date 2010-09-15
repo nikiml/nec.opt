@@ -319,10 +319,10 @@ class NecFileObject:
 		f.close()
 		return nec_output
 		
-	def runSweepT(self, sweep, number, result_map, result_lock ):
+	def runSweepT(self, sweep, number, result_map, result_lock, id ):
 		r = self.runSweep(sweep, result_lock)
 		result_lock.acquire()
-		try: result_map[number]=r
+		try: result_map[number]=(r,id)
 		finally: result_lock.release()
 
 	def runSweeps(self, sweeps, num_cores=1, cleanup=0):
@@ -387,7 +387,7 @@ class NecFileObject:
 				s = [sweep[0]+j*fps*sweep[1],sweep[1],fps]
 				if j==ncores-1:
 					s = [sweep[0]+j*fps*sweep[1],sweep[1],sweep[2]-j*fps]
-				threads.append(Thread(target=self.runSweepT, args=(s, number,results, result_lock )))
+				threads.append(Thread(target=self.runSweepT, args=(s, number,results, result_lock,i )))
 				threads[-1].start()
 				number = number+1
 
@@ -411,7 +411,7 @@ class NecFileObject:
 		print "\n"
 	
 		for r in range(len(results)):
-			nop = NOP(results[r], char_impedance, self.angle_step, frequency_data)
+			nop = NOP(results[r][0], char_impedance, self.angle_step, frequency_data)
 			nop.printFreqs(r==0)
 
 

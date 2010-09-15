@@ -3,7 +3,7 @@
 
 
 import differential_evolution as DE
-import os, math
+import os, math,sys
 from nec import eval as ne
 
 class NecFileEvaluator:
@@ -104,11 +104,12 @@ class NecFileEvaluator:
 
 		return map(math.atanh, res)
 
-	def freqID(self, freq):
-		for i in range(len(self.ranges)):
-			r = self.ranges[i]
-			if freq >= r[0] and freq <=r[0]+r[1]*r[2]:
-				return (i, int((freq-r[0])/r[1]))
+	def freqID(self, freq, sweepid):
+#		for i in range(len(self.ranges)):
+		i = sweepid
+		r = self.ranges[i]
+		if freq >= r[0] and freq <=r[0]+r[1]*r[2]:
+			return (i, int((freq-r[0])/r[1]))
 
 		raise "frequence %.3f out of all ranges"%freq
 
@@ -165,10 +166,11 @@ class NecFileEvaluator:
 		NOP = ne.NecOutputParser
 		try:
 			for r in results:
-				nop = NOP(r, self.char_impedance, self.nec_file.angle_step, self.frequency_data)
+				nop = NOP(r[0], self.char_impedance, self.nec_file.angle_step, self.frequency_data)
 				#print "output parsed"
+				sweepid = r[1]
 				for freq in nop.frequencies:
-					freqid = self.freqID(freq.freq)
+					freqid = self.freqID(freq.freq, sweepid)
 					if self.frequency_data:
 						tl = self.frequency_data[freq.freq][1]
 					else:
@@ -210,6 +212,7 @@ class NecFileEvaluator:
 			res = eval(self.target_function, d)
 
 		except:
+			print sys.exc_info()[1]
 			res = -1000
 		if res == -1000:
 			res = 1000.0
@@ -298,8 +301,8 @@ def main():
 	try:
 		if not options.local_search:
 			de_plugin = None
-			if options.desqi:
-				de_plugin = DE.DESQIPlugin()
+			#if options.desqi:
+			#	de_plugin = DE.DESQIPlugin()
 			optimiser = DE.differential_evolution_optimizer(evaluator, population_size = options.de_np, f = options.de_f, cr = options.de_cr, show_progress=1, insert_solution_vector=ins_sol_vec, max_iter=options.max_iter, plugin = de_plugin)
 		else:
 			#from scipy import optimize
