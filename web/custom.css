@@ -1,0 +1,25 @@
+code.box, pre.box { background: #EEEEEE; padding: .5em; margin-bottom: 1em; line-height: 1  }
+div.menu { background: #C5CCD9 }
+
+table {
+	border-width: 1px 1px 1px 1px;
+	border-spacing: 1px;
+	border-style: outset outset outset outset;
+	border-color: black black black black;
+	border-collapse: separate;
+}
+table th {
+	border-width: 1px 1px 1px 1px;
+	padding: 1px 1px 1px 1px;
+	border-style: inset inset inset inset;
+	border-color: black black black black;
+	-moz-border-radius: 0px 0px 0px 0px;
+}
+table td {
+	border-width: 1px 1px 1px 1px;
+	padding: 1px 1px 1px 1px;
+	border-style: inset inset inset inset;
+	border-color: black black black black;
+	-moz-border-radius: 0px 0px 0px 0px;
+}
+
