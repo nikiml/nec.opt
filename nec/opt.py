@@ -12,18 +12,23 @@ class NecFileEvaluator:
 		self.log = None
 		self.target_function = options.target_function
 		self.char_impedance = options.char_impedance
-		self.nec_file = ne.NecFileObject(options.input, options.output)
+		self.nec_file = ne.NecFileObject(options)
 		self.nec_file.autoSegmentation(options.auto_segmentation)
 		self.output_population = options.output_population
 		self.output_best = options.output_best
+		self.parameters = options.parameters
 		
 		self.ranges = options.sweeps
 		self.target_levels = options.target_levels
 		self.swr_target = options.swr_target
-		self.opt_vars = self.nec_file.min_max.keys()
-		self.tanh_domain = self.nec_file.min_max.values()
-		self.domain = len(self.nec_file.min_max.values())*[[-1,1]]
+		self.opt_vars = []
+		self.tanh_domain = []
+		for k in self.nec_file.min_max.keys():
+			if not self.parameters or k in self.parameters:
+				self.opt_vars.append(k)
+				self.tanh_domain.append(self.nec_file.min_max[k])
 		self.n = len(self.opt_vars)
+		self.domain = self.n*[[-1,1]]
 		self.x = []
 		self.best_score = 999.0
 		self.frequency_data = options.frequency_data
@@ -37,8 +42,9 @@ class NecFileEvaluator:
 		self.comments = [""]
 		self.comments.append("Input file: "+options.input)
 		self.comments.append("Sweep ranges: ")
+		self.errors=1
 		for i in range(len(self.ranges)):
-			self.comments.append(str(self.ranges[i]))
+			self.comments.append("R%d = "%i + str(self.ranges[i]))
 			if not self.frequency_data:
 				self.comments[-1]+=(" with target levels "+str(self.target_levels[i]))
 		if self.frequency_data:
@@ -55,7 +61,15 @@ class NecFileEvaluator:
 			self.log.write("\n".join(self.comments))
 			
 			self.log.write("============"*10+"\n")
-			self.log.write(self.nec_file.formatName("Score")+"\t"+"\t".join(map(self.nec_file.formatName, self.opt_vars))+"\n")
+
+			range_scores = []
+			for i in range(len(self.ranges)):
+				range_scores.append( "R%dmg"%i)
+				range_scores.append( "R%dag"%i)
+				range_scores.append( "R%dms"%i)
+				range_scores.append( "R%das"%i)
+
+			self.log.write(self.nec_file.formatName("Score")+"\t"+"\t".join(map(self.nec_file.formatName, self.opt_vars))+"\t"+"\t".join(map(self.nec_file.formatName, range_scores))+"\n")
 			self.log.flush()
 
 	def __del__(self):
@@ -131,8 +145,20 @@ class NecFileEvaluator:
 		self.log.write("--------------------------------------------------------------------------------\n")
 		self.log.flush()
 
-	def logParamVector(self, vector, score):
-		self.log.write(self.nec_file.formatNumber(score)+"\t"+"\t".join(map(self.nec_file.formatNumber, vector))+"\n")
+	def logParamVector(self, vector, score, range_results=None):
+		if range_results:
+			range_scores=[]
+			for i in range(len(self.ranges)):
+				range_scores.append(range_results[i].max_gain_diff)
+				range_scores.append(range_results[i].gain_diff_sum/max(range_results[i].count,1))
+				range_scores.append(range_results[i].max_swr_diff)
+				range_scores.append(range_results[i].swr_diff_sum/max(range_results[i].count,1))
+
+			range_scores = "\t"+"\t".join(map(self.nec_file.formatNumber, range_scores))
+				
+		else:
+			range_scores=""
+		self.log.write(self.nec_file.formatNumber(score)+"\t"+"\t".join(map(self.nec_file.formatNumber, vector))+range_scores+"\n")
 		self.log.flush()
 
 	def target(self, vector):
@@ -162,6 +188,13 @@ class NecFileEvaluator:
 			self.nec_file.vars[var]=vector[i]
 
 		results = self.nec_file.runSweeps(self.ranges, self.ncores, cleanup=1)
+		if not results:
+			print "writing erroneous file..."
+			self.nec_file.writeParametrized("error%d.nec"%self.errors)
+			print "done"
+			return 1000.0
+
+
 		res = -1000
 		NOP = ne.NecOutputParser
 		try:
@@ -222,7 +255,7 @@ class NecFileEvaluator:
 		print res
 		print "\n"
 		if self.log:
-			self.logParamVector(vector,res)
+			self.logParamVector(vector,res, range_results)
 			self.log.flush()
 #			self.log.write(self.nec_file.formatNumber(res)+"\t"+"\t".join(map(self.nec_file.formatNumber, vector))+"\n")
 
@@ -265,12 +298,16 @@ def optionsParser():
 			self.add_option("-P", "--output_population", default = False, action="store_true", help="output the full population in the log file after every iteration.")
 			self.add_option("-f", "--frequency_data", default = "{}", help="a map of frequency to (angle, expected_gain) tuple" )
 			self.add_option("-b", "--output-best", default = -1, help="set to 0 or 1 to output the best score nec file as 'best.nec'. Default is -1 (output if not in local search)." )
+			self.add_option("-p", "--parameters", default = "", help="If not empty restrict the list of optimization parameters to this list." )
 
 			
 		def parse_args(self):
 			options, args = ne.OptionParser.parse_args(self)
 			if options.target_levels: options.target_levels = map(eval, options.target_levels)
 			options.frequency_data = eval(options.frequency_data)
+			options.parameters = options.parameters.replace(',',' ').split()
+			if options.parameters:
+				print "Parameters restricted to "+str(options.parameters)
 			if options.output_best == -1:
 				if options.local_search: options.output_best = 0
 				else: options.output_best = 1

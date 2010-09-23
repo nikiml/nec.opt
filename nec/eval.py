@@ -1,7 +1,8 @@
 # Copyright 2010 Nikolay Mladenov, Distributed under 
 # GNU General Public License
 
-import math
+import math,sys
+from demathutils import v3add, v3mul, v3sub, v3dot, v3cross, v3len, v3unit, v3rotx, v3roty, v3rotz
 
 output = "output"
 input = "input.nec"
@@ -111,7 +112,7 @@ class NecOutputParser:
 			self.frequencies = freqs
 
 class NecFileObject:
-	def __init__(self, sourcefile=None, output="output", engine="nec2dxs1k5.exe"):
+	def __init__(self, options):
 		self.vars = {}
 		self.min_max = {}
 		self.dependent_vars = []
@@ -121,13 +122,14 @@ class NecFileObject:
 		self.source_tags={}
 		self.autosegment=(0,0)
 		self.frequency = 585
-		self.output = output
-		self.engine = engine
-		self.sourcefile = sourcefile
+		self.output = options.output
+		self.engine = options.engine
+		self.sourcefile = options.input
 		self.scale = 1
 		self.angle_step = 5
-		if sourcefile:
-			self.readSource(sourcefile)
+		self.min_wire_distance = options.min_wire_distance
+		if self.sourcefile:
+			self.readSource(self.sourcefile)
 
 	def readSource(self, sourcefile):
 		self.sourcefile = sourcefile
@@ -209,9 +211,185 @@ class NecFileObject:
 	
 	def formatName(self, n):
 		return "%8s"%n
-	
+
+	def testLineIntersection(self, tag1, tag2, line1, line2, r1, r2):
+		#print "line1[0] = [%f, %f, %f]"%tuple(line1[0])
+		#print "line1[1] = [%f, %f, %f]"%tuple(line1[1])
+		#print "line2[0] = [%f, %f, %f]"%tuple(line2[0])
+		#print "line2[1] = [%f, %f, %f]"%tuple(line2[1])
+		v1 = v3sub(line1[1],line1[0])
+		l = v3len(v1)
+		if not l:
+			raise RuntimeError("Line with 0 length (tag %d)"%tag1)
+		v1 = v3mul(1.0/l,v1)
+		v2 = v3sub(line2[1],line2[0])
+		l = v3len(v2)
+		if not l:
+			raise RuntimeError("Line with 0 length (tag %d)"%tag2)
+		v2 = v3mul(1.0/l,v2)
+		n = v3unit(v3cross(v1,v2))
+		#print "v1 = [%f, %f, %f]"%tuple(v1)
+		#print "v2 = [%f, %f, %f]"%tuple(v2)
+		#print "n  = [%f, %f, %f]"%tuple(n)
+		if n[0]==0 and n[1]==0 and n[2]==0: #parallel
+			v2 = v3sub(line2[1], line1[0])
+			d = v3dot(v1,v2)
+			pr = v3add(line1[0],v3mul(d, v1))
+			pr = v3sub(line2[1],pr)
+			pr = v3len(pr)
+			if pr>r1+r2+self.min_wire_distance:
+				return 1
+
+			zerocount = 0
+			v2 = v3sub(line2[0], line1[0])
+			d = d * v3dot(v1,v2)
+			if d < 0 :
+				raise RuntimeError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
+			elif d == 0:
+				zerocount = zerocount+1
+			v2 = v3sub(line2[1], line1[1])
+			d = v3dot(v1,v2)
+			v2 = v3sub(line2[0], line1[1])
+			d = d * v3dot(v1,v2)
+			if d < 0 :
+				raise RuntimeError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
+			elif d == 0:
+				zerocount = zerocount+1
+
+			v2 = v3sub(line1[1], line2[1])
+			d = v3dot(v1,v2)
+			v2 = v3sub(line1[0], line2[1])
+			d = d * v3dot(v1,v2)
+			if d < 0 :
+				raise RuntimeError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
+			elif d == 0:
+				zerocount = zerocount+1
+
+
+			v2 = v3sub(line1[1], line2[0])
+			d = v3dot(v1,v2)
+			v2 = v3sub(line1[0], line2[0])
+			d = d * v3dot(v1,v2)
+			if d < 0 :
+				raise RuntimeError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
+			elif d == 0:
+				zerocount = zerocount+1
+
+			if zerocount > 2 :
+				raise RuntimeError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
+
+			return 1
+
+		s = v3sub(line1[0], line2[0])
+		#print "s  = [%f, %f, %f]"%tuple(s)
+		d = v3dot(n, s)
+		#print "plane line distance = %f"%d
+		if abs(d) > r1+r2 + self.min_wire_distance: #infinite lines are far enough
+			return 1
+
+		m = v3mul(d, n)
+		l20 = v3sub(line2[0],m)
+		l21 = v3sub(line2[1],m)
+		#line2 and line1 are no in one plane
+
+		c1 = v3cross(v3unit(v3sub(l20,line1[0])),v1)
+		#print "c1 = [%f, %f, %f]"%tuple(c1)
+		c2 = v3cross(v3unit(v3sub(l21,line1[0])),v1)
+		#print "c2 = [%f, %f, %f]"%tuple(c2)
+		dot1 = v3dot(c1, n)*v3dot(c2, n)
+		c3 = v3cross(v3unit(v3sub(line1[0],l20)),v2)
+		#print "c3 = [%f, %f, %f]"%tuple(c3)
+		c4 = v3cross(v3unit(v3sub(line1[1],l20)),v2)
+		#print "c4 = [%f, %f, %f]"%tuple(c4)
+		dot2 = v3dot(c3, n)*v3dot(c4, n)
+		#print (dot1, dot2)
+		if dot1 < 0 and dot2 < 0:
+				raise RuntimeError("Intersecting lines (tag %d and tag %d)"%(tag1, tag2))
+		return 1
+	def testLineIntersections(self, lines):
+		nlines= len(lines)
+		for i in range(nlines):
+			for j in range(i+1,nlines):
+				self.testLineIntersection(lines[i][0], lines[j][0], [lines[i][2:5],lines[i][5:8]], [lines[j][2:5],lines[j][5:8]], lines[i][8], lines[i][8])
+
+		return 1
+
+	def mirrorStructure(self, lines, tincr, x,y,z):
+		#print "mirroring"
+		l = len(lines)
+		for i in range(l):
+			lines.append(list(lines[i]))
+			if lines[l+i][0]:
+				lines[l+i][0]=lines[i][0]+tincr
+			if x:
+				lines[l+i][2]=-lines[i][2]
+				lines[l+i][5]=-lines[i][5]
+			if y:
+				lines[l+i][3]=-lines[i][3]
+				lines[l+i][6]=-lines[i][6]
+			if z:
+				lines[l+i][4]=-lines[i][4]
+				lines[l+i][7]=-lines[i][7]
+
+	def moveStructure(self, lines, rng, tincr, rx, ry,rz, x,y,z):
+		rx = math.pi*rx/180
+		ry = math.pi*ry/180
+		rz = math.pi*rz/180
+		for i in range(rng[0], rng[1]):
+			if lines[i][0]:
+				lines[i][0]+=tincr
+			s = lines[i][2:5]
+			e = lines[i][5:8]
+			v3rotx(rx, s)
+			v3rotx(rx, e)
+			v3roty(ry, s)
+			v3roty(ry, e)
+			v3rotz(rz, s)
+			v3rotz(rz, e)
+			s[0]+=x
+			s[1]+=y
+			s[2]+=z
+			e[0]+=x
+			e[1]+=y
+			e[2]+=z
+			lines[i][2:5]=s
+			lines[i][5:8]=e
+
+	def moveCopyStructure(self, lines, tincr, new_structures, rx, ry,rz, x,y,z, from_tag):
+		#print "mirroring"
+		l = len(lines)
+		rng = (0, l)
+		if from_tag:
+			for i in range(0,l):
+				if lines[i][0]==from_tag:
+					rng = (i,l)
+					break
+			if rng == (0,l) and lines[0][0]!=from_tag:
+				return
+
+		if not new_structures:
+			self.moveStructure(lines, rng, tincr, rx,ry,rz,x,y,z)
+			return
+
+		while new_structures:
+			new_structures = new_structures-1
+			for i in range(rng[0],rng[1]):
+				lines.append(list(lines[i]))
+
+			rng = (l,len(lines))
+			l = len(lines)
+			self.moveStructure(lines, rng, tincr, rx,ry,rz,x,y,z)
+
+
+	def rotateStructure(self, lines, tincr, nstructures):
+		if nstructures<=1:
+			return
+		self.moveCopyStructure(lines, tincr, nstructures-1, 0, 0,360.0/nstructures, 0,0,0, 0)
+
+
 	def writeNecInput(self, filename, extralines=[], skiptags=[]):
 		lines=[]
+		math_lines = []
 		self.globals={}
 		self.globals.update(self.vars)
 		for d in self.dependent_vars:
@@ -222,10 +400,19 @@ class NecFileObject:
 		for ln in self.varlines:
 			if not ln: continue
 			if ln[0].strip() != "GW":
-				if ln[0] not in skiptags:
+				if ln[0].strip() not in skiptags:
 					lines.append(" ".join(ln))
+				if ln[0].strip() == "GX":
+					self.mirrorStructure(math_lines, int(ln[1]), int(ln[2][0]), int(ln[2][1]), int(ln[2][2]))
+				elif ln[0].strip() == "GM":
+					if len(ln) < 9:
+						ln=ln+(9-len(ln))*[.0]
+					self.moveCopyStructure(math_lines, int(ln[1]), int(ln[2]), float(ln[3]), float(ln[4]), float(ln[5]),float(ln[6]), float(ln[7]), float(ln[8]), int(float(ln[8])))
+				elif ln[0].strip() == "GR":
+					self.rotateStructure(math_lines, int(ln[1]), int(ln[2]))
 			else:
 				sline = map( self.evalToken , ln[1:])
+				math_lines.append(list(sline))
 				if self.autosegment[0]:
 					self.autoSegment(sline)
 				sline = map(self.formatNumber, sline)
@@ -236,6 +423,9 @@ class NecFileObject:
 		file = open(filename, "wt")
 		try: file.write("\n".join(lines))
 		finally: file.close()
+		if not self.testLineIntersections(math_lines):
+			return 0
+		return 1
 	def writeParametrized(self, filename, extralines=[], skiptags=[], comments=[]):
 		lines=[]
 		self.globals={}
@@ -320,7 +510,11 @@ class NecFileObject:
 		return nec_output
 		
 	def runSweepT(self, sweep, number, result_map, result_lock, id ):
-		r = self.runSweep(sweep, result_lock)
+		try:
+			r = self.runSweep(sweep, result_lock)
+		except:
+			print sys.exc_info()[1]
+			return
 		result_lock.acquire()
 		try: result_map[number]=(r,id)
 		finally: result_lock.release()
@@ -430,6 +624,7 @@ class OptionParser(optparse.OptionParser):
 		self.add_option("-n", "--num-cores", type="int", default=ncores, help="number of cores to be used, default=%default")
 		self.add_option("-a", "--auto-segmentation", metavar="NUM_SEGMENTS", type="int", default=autosegmentation, help="autosegmentation level - set to 0 to turn autosegmentation off, default=%default")
 		self.add_option("-e", "--engine", metavar="NEC_ENGINE", default="nec2dxs1k5.exe", help="nec engine file name, default=%default")
+		self.add_option("-d", "--min-wire-distance", default=".005", type="float", help="minimum surface-to-surface distance allowed between non-conecting wires, default=%default")
 	def parse_args(self):
 		options, args = optparse.OptionParser.parse_args(self)
 		if options.input == "":
@@ -462,7 +657,7 @@ def optionParser():
 
 
 def run(options):
-	nf = NecFileObject(options.input, options.output, options.engine)
+	nf = NecFileObject(options)
 	nf.autoSegmentation(options.auto_segmentation)
 	nf.evaluate(options.sweeps, options.char_impedance, options.num_cores, 0, options.frequency_data)
 
