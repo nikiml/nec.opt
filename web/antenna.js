@@ -1,3 +1,28 @@
+// copyright 2010 Nikolay Mladenov
+
+if (!Array.prototype.indexOf)
+{
+  Array.prototype.indexOf = function(elt /*, from*/)
+  {
+    var len = this.length;
+
+    var from = Number(arguments[1]) || 0;
+    from = (from < 0)
+         ? Math.ceil(from)
+         : Math.floor(from);
+    if (from < 0)
+      from += len;
+
+    for (; from < len; from++)
+    {
+      if (from in this &&
+          this[from] === elt)
+        return from;
+    }
+    return -1;
+  };
+}
+
 			function getClientWidth() {
 				return document.compatMode=='CSS1Compat' && !window.opera?document.documentElement.clientWidth:document.body.clientWidth;
 			}
@@ -5,6 +30,17 @@
 			function getClientHeight() {
 				return document.compatMode=='CSS1Compat' && !window.opera?document.documentElement.clientHeight:document.body.clientHeight;
 			}
+			function getInternetExplorerVersion() {
+			    var rv = -1; // Return value assumes failure.
+			    if (navigator.appName == 'Microsoft Internet Explorer') {
+			        var ua = navigator.userAgent;
+			        var re = new RegExp("MSIE ([0-9]{1,}[\.0-9]{0,})");
+				if (re.exec(ua) != null)
+			            rv = parseFloat(RegExp.$1);
+			    }
+			    return rv;
+			}
+		
 
 
 			function radians(deg)
@@ -18,6 +54,10 @@
 			function coordToMM(c)
 			{
 				return Math.round(c*10000)/10;
+			}
+			function lenToMM1(c)
+			{
+				return Math.round(c*10000)/10+"mm";
 			}
 	
 			function simplify16th(s)
@@ -71,22 +111,30 @@
 				this.yoffset=h/2+this.initial_y_offset;
 				this.rotate_mode = 0;
 				this.in_inch = 0;
+				this.ie = (getInternetExplorerVersion()!=-1)
 
-				this.coords = [];
+				this.segments = [];
 
 				var i=0;
 				for(i=0; i!=coords.length; i++)
 				{
-					this.coords.push([]);
-					this.coords[i].push(coords[i][0])
+					var color = coords[i][0];
+
 					var pts = coords[i].slice(1);
+					if(pts.length%6!=0)
+						alert("Invalid geometry array - length="+pts.length);
 					for ( j=0; j!=pts.length; j+=6){
 						var s = $V(pts.slice(j,j+3));
-						var e =$V(pts.slice(j+3,j+6));
-						var len =  s.subtract(e).modulus();
-						this.coords[i].push(
-								{"s": s
-								,"e":e
+						var e = $V(pts.slice(j+3,j+6));
+						var dif = s.subtract(e);
+						var len = dif.modulus();
+						this.segments.push(
+								{ "color":color
+								, "pts":[s,e]
+								, "segment_selected":0
+								, "sselected":0
+								, "eselected":0
+								, "len":len
 								, "names": [
 								[lenToMM(len),coordToMM(s.e(1))+","+coordToMM(s.e(2))+","+coordToMM(s.e(3)),coordToMM(e.e(1))+","+coordToMM(e.e(2))+","+coordToMM(e.e(3))],
 								[lenToIN(len),coordToIN(s.e(1))+","+coordToIN(s.e(2))+","+coordToIN(s.e(3)),coordToIN(e.e(1))+","+coordToIN(e.e(2))+","+coordToIN(e.e(3))] ]
@@ -178,6 +226,91 @@
 					this.r.text(x2,y2,"Z").translate(this.xoffset,this.yoffset).attr({stroke: "#00b", "stroke-width": 1});
 				}
 
+				this.drawInformation = function(selected)
+				{
+					var lenToUnit = this.in_inch?lenToIN:lenToMM1
+					if (! selected.length)
+					{
+						this.r.text(w/2 ,7,"Select points or segments for info");
+						return;
+					}
+					var total_len=0;
+					var pts=[];
+					var i;
+					for(i=0; i!=selected.length; ++i)
+					{
+						var seg = this.segments[selected[i][0]];
+						if(selected[i][1]==0)
+						{
+							pts.push(seg.pts[0]);
+							pts.push(seg.pts[1]);
+							total_len+=seg.len;
+						}else
+							pts.push(seg.pts[selected[i][1]-1]);
+					}
+					var xs=[];
+					var ys=[];
+					var zs=[];
+					for (i=0;i!=pts.length; ++i)
+					{
+						if (xs.indexOf(pts[i].e(1))==-1){
+							xs.push(pts[i].e(1));
+						}
+						if (ys.indexOf(pts[i].e(2))==-1){
+							ys.push(pts[i].e(2));
+						}
+						if (zs.indexOf(pts[i].e(3))==-1){
+							zs.push(pts[i].e(3));
+						}
+					}
+					str="";
+					if(xs.length==1){
+						str += " x="+lenToUnit(xs[0]);
+					}
+					else {
+						if(xs.length==2)
+							str += " dx="+lenToUnit(Math.abs(xs[0]-xs[1]));
+					}
+					if(ys.length==1){
+						str += " y="+lenToUnit(ys[0]);
+					}else {
+						if(ys.length==2)
+							str += " dy="+lenToUnit(Math.abs(ys[0]-ys[1]));
+					}
+					if(zs.length==1){
+						str += " z="+lenToUnit(zs[0]);
+					}else {
+						if(zs.length==2)
+							str += " dz="+lenToUnit(Math.abs(zs[0]-zs[1]));
+					}
+
+					if(total_len>0)
+						str+=" Total len="+lenToUnit(total_len);
+
+					this.r.text(w/2,7,"Selection info ("+selected.length+"): "+str);
+
+
+				}
+				var popup = function () {
+						tags && tags.remove();
+						tags.push(geometry.r.g.popup(this.x, this.y,this.value, null, 3));//.insertAfter(this));
+					}
+				var popdown = function () {
+							tags && tags.remove();
+							}
+				var segclick = function() {
+							geometry.segments[this.si].selected = !geometry.segments[this.si].selected;
+							geometry.redraw();
+							}
+				var startclick = function() {
+							geometry.segments[this.si].sselected = !geometry.segments[this.si].sselected;
+							geometry.redraw();
+							}
+				var endclick = function() {
+							geometry.segments[this.si].eselected = !geometry.segments[this.si].eselected;
+							geometry.redraw();
+							}
+
 				this.redraw = function()
 				{
 					tags&& tags.remove();
@@ -194,69 +327,97 @@
 							, function(){geometry.lastx=0;geometry.lasty=0;}
 							,function(){}
 							);
-					this.drawAxis()
-
+				
 					var unit_names = this.in_inch?1:0;
 
-					var scr_coords=[];
+					var seg_scr_coords=[];
 
 					var i=0
-					for(i=0; i!=this.coords.length; i++)
+					for(i=0; i!=this.segments.length; i++)
 					{
-						var pts = this.coords[i]
-						var color = pts[0];
-						for ( j=1; j!=pts.length; j++){
-							var pt = pts[j]
-							var s = this.matrix.x(pt.s);
-							var e = this.matrix.x(pt.e);
-							var x1 = s.e(1)*this.scale;
-							var y1 = -s.e(2)*this.scale;
-							var x2 = e.e(1)*this.scale;
-							var y2 = -e.e(2)*this.scale;
-							var z = Math.min(s.e(3), e.e(3))
-							scr_coords.push([color, x1,y1,x2,y2,z,pt.names])
-
-						}
-					}
-					scr_coords.sort(function(a,b) { return a[5]-b[5];});
-					for(i=0; i!=scr_coords.length; ++i)
-					{
-						pt = scr_coords[i];
-						color = pt[0];
-						x1 = pt[1];
-						y1=pt[2];
-						x2=pt[3];
-						y2=pt[4];
-						z=pt[5];
-						names=pt[6]
-
-						var str = "M"+x1+" "+y1+"L"+x2+" "+y2;
-						var p = this.r.path(str).translate(this.xoffset,this.yoffset).attr({stroke: color, "stroke-width": 3});
-						p.value =names[unit_names][0];
-						p.x = (x1+x2)/2+this.xoffset;
-						p.y = (y1+y2)/2+this.yoffset;
-						var popup = function () {
-								tags && tags.remove();
-								tags.push(geometry.r.g.popup(this.x, this.y,this.value, null, 3));//.insertAfter(this));
-							}
-						p.hover(popup, function () {
-								tags && tags.remove();
-								});
-						var c = this.r.circle(this.xoffset+x1,this.yoffset+y1,3).attr({stroke: color, fill: color});
-						c.value = names[unit_names][1];
-						c.x = this.xoffset+x1;
-						c.y = this.yoffset+y1;
-						c.hover(popup, function () {
-								tags && tags.remove();
-								});
-						var c = this.r.circle(this.xoffset+x2,this.yoffset+y2,3).attr({stroke: color, fill: color});
-						c.value = names[unit_names][2];
-						c.x = this.xoffset+x2;
-						c.y = this.yoffset+y2;
-						c.hover(popup, function () {
-								tags && tags.remove();
+						var s = this.matrix.x(this.segments[i].pts[0]);
+						var e = this.matrix.x(this.segments[i].pts[1]);
+						seg_scr_coords.push(
+								{"z":Math.min(s.e(3), e.e(3))
+								,"x1":s.e(1)*this.scale+this.xoffset
+								,"y1":-s.e(2)*this.scale+this.yoffset
+								,"x2":e.e(1)*this.scale+this.xoffset
+								,"y2":-e.e(2)*this.scale+this.yoffset
+								,"sindex":i
 								});
 					}
+					seg_scr_coords.sort(function(a,b) { return a.z-b.z;});
+					var selected = [];
+					if(!this.ie)
+					for(i=0; i!=seg_scr_coords.length; ++i)
+					{
+						var seg = seg_scr_coords[i];
+
+						var str = "M"+seg.x1+" "+seg.y1+"L"+seg.x2+" "+seg.y2;
+						var si = seg.sindex;
+						var p = this.r.path(str).attr({stroke: "#fff", "stroke-width": 11});
+						p.value = this.segments[si].names[unit_names][0];
+						p.x = (seg.x1+seg.x2)/2;
+						p.y = (seg.y1+seg.y2)/2;
+						p.si = si;
+						p.hover(popup, popdown);
+						p.click(segclick);
+						var c = this.r.circle(seg.x1,seg.y1,7).attr({stroke: "#fff", fill: "#fff"});
+						c.value = this.segments[si].names[unit_names][1];
+						c.x = seg.x1;
+						c.y = seg.y1;
+						c.si = si;
+						c.hover(popup, popdown);
+						c.click(startclick);
+						var c = this.r.circle(seg.x2,seg.y2,7).attr({stroke: "#fff", fill: "#fff"});
+						c.value = this.segments[si].names[unit_names][2];
+						c.x = seg.x2;
+						c.y = seg.y2;
+						c.si = si;
+						c.hover(popup, popdown);
+						c.click(endclick);
+					}
+					this.drawAxis();
+					for(i=0; i!=seg_scr_coords.length; ++i)
+					{
+						var seg = seg_scr_coords[i];
+
+						var str = "M"+seg.x1+" "+seg.y1+"L"+seg.x2+" "+seg.y2;
+						var si = seg.sindex;
+						var color = this.segments[si].color;
+						var clr = (this.segments[si].selected?"#f0f":color);
+						var p = this.r.path(str).attr({stroke: clr, "stroke-width": 3});
+						p.value = this.segments[si].names[unit_names][0];
+						p.x = (seg.x1+seg.x2)/2;
+						p.y = (seg.y1+seg.y2)/2;
+						p.si = si;
+						if(this.segments[si].selected)
+							selected.push([si,0]);
+						p.hover(popup, popdown);
+						p.click(segclick);
+						clr = (this.segments[si].sselected?"#f0f":color);
+						var c = this.r.circle(seg.x1,seg.y1,3).attr({stroke: clr, fill: clr});
+						c.value = this.segments[si].names[unit_names][1];
+						c.x = seg.x1;
+						c.y = seg.y1;
+						c.si = si;
+						if(this.segments[si].sselected)
+							selected.push([si,1]);
+						c.hover(popup, popdown);
+						c.click(startclick);
+						clr = (this.segments[si].eselected?"#f0f":color);
+						var c = this.r.circle(seg.x2,seg.y2,3).attr({stroke: clr, fill: clr});
+						c.value = this.segments[si].names[unit_names][2];
+						c.x = seg.x2;
+						c.y = seg.y2;
+						c.si = si;
+						if(this.segments[si].eselected)
+							selected.push([si,2]);
+						c.hover(popup, popdown);
+						c.click(endclick);
+					}
+
+					this.drawInformation(selected);
 
 					//this.r.g.arrow(w-10, h/2,10).attr({fill: "#000"}).click(function(event){geometry.xoffset+=10; geometry.redraw(); });
 					//this.r.g.arrow(10, h/2,10).attr({fill: "#000"}).rotate(180).click(function(event){geometry.xoffset-=10; geometry.redraw(); });
@@ -267,7 +428,15 @@
 					this.r.g.plus(15, h-15,10).attr({fill: "#000"}).click(function(event){geometry.scale=geometry.scale*1.1; geometry.redraw(); });
 					this.r.circle(40, h-15,10).attr({fill: "#fff"}).click(function(event){geometry.scale=geometry.scale/1.1; geometry.redraw(); });
 					this.r.g.line(40, h-15,10).attr({fill: "#000"}).click(function(event){geometry.scale=geometry.scale/1.1; geometry.redraw(); });
-					this.r.g.label(80, h-15, "Reset").click(function(event){geometry.home(); });
+					this.r.g.label(80, h-15, "Reset").click(function(event){
+							for(i=0; i!=geometry.segments.length; ++i)
+							{
+								geometry.segments[i].selected = 0;
+								geometry.segments[i].sselected = 0;
+								geometry.segments[i].eselected = 0;
+							}
+							geometry.home(); 
+							});
 					this.r.g.label(150, h-15, this.in_inch?"Switch to MM":"Switch to IN").click(function(event){geometry.in_inch=!geometry.in_inch; geometry.redraw(); });
 					var c = this.r.circle(w-24,h-15,14).attr({stroke: "#000"}).click(switchRotateMode);
 					this.r.g.label(w-86, h-15, "F").click(function(event){geometry.matrix=$M([[0,1,0],[0,0,1],[1,0,0]]); geometry.redraw(); });
