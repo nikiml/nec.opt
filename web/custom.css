@@ -22,4 +22,8 @@ table td {
 	border-color: black black black black;
 	-moz-border-radius: 0px 0px 0px 0px;
 }
+html { 
+	overflow: auto; 
+	border: none; 
+}
 
