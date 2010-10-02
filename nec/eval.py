@@ -213,6 +213,18 @@ class NecFileObject:
 		return "%8s"%n
 
 	def testLineIntersection(self, tag1, tag2, line1, line2, r1, r2):
+		if line1[0]==line2[0]:
+			if line1[1]!=line2[1]:return 1
+			else :	raise RuntimeError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, 0))
+		if line1[0]==line2[1]:
+			if line1[1]!=line2[0]:return 1
+			else :	raise RuntimeError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, 0))
+		if line1[1]==line2[0]:
+			if line1[0]!=line2[1]:return 1
+			else :	raise RuntimeError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, 0))
+		if line1[1]==line2[1]:
+			if line1[0]!=line2[0]:return 1
+			else :	raise RuntimeError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, 0))
 		#print "line1[0] = [%f, %f, %f]"%tuple(line1[0])
 		#print "line1[1] = [%f, %f, %f]"%tuple(line1[1])
 		#print "line2[0] = [%f, %f, %f]"%tuple(line2[0])
@@ -290,7 +302,7 @@ class NecFileObject:
 		m = v3mul(d, n)
 		l20 = v3sub(line2[0],m)
 		l21 = v3sub(line2[1],m)
-		#line2 and line1 are no in one plane
+		#line2 and line1 are now in one plane
 
 		c1 = v3cross(v3unit(v3sub(l20,line1[0])),v1)
 		#print "c1 = [%f, %f, %f]"%tuple(c1)
@@ -332,6 +344,7 @@ class NecFileObject:
 				lines[l+i][7]=-lines[i][7]
 
 	def moveStructure(self, lines, rng, tincr, rx, ry,rz, x,y,z):
+		#print "moving %d lines, from %d to %d, incrementing tags with %d"%(rng[1]-rng[0],rng[0],rng[1],tincr)
 		rx = math.pi*rx/180
 		ry = math.pi*ry/180
 		rz = math.pi*rz/180
@@ -340,12 +353,15 @@ class NecFileObject:
 				lines[i][0]+=tincr
 			s = lines[i][2:5]
 			e = lines[i][5:8]
-			v3rotx(rx, s)
-			v3rotx(rx, e)
-			v3roty(ry, s)
-			v3roty(ry, e)
-			v3rotz(rz, s)
-			v3rotz(rz, e)
+			if rx:
+				v3rotx(rx, s)
+				v3rotx(rx, e)
+			if ry:
+				v3roty(ry, s)
+				v3roty(ry, e)
+			if rz:
+				v3rotz(rz, s)
+				v3rotz(rz, e)
 			s[0]+=x
 			s[1]+=y
 			s[2]+=z
@@ -356,7 +372,7 @@ class NecFileObject:
 			lines[i][5:8]=e
 
 	def moveCopyStructure(self, lines, tincr, new_structures, rx, ry,rz, x,y,z, from_tag):
-		#print "mirroring"
+		#print "moving %d lines, incrementing tags with %d, starting from tag %d"%(len(lines),tincr, from_tag)
 		l = len(lines)
 		rng = (0, l)
 		if from_tag:
@@ -407,7 +423,7 @@ class NecFileObject:
 				elif ln[0].strip() == "GM":
 					if len(ln) < 9:
 						ln=ln+(9-len(ln))*[.0]
-					self.moveCopyStructure(math_lines, int(ln[1]), int(ln[2]), float(ln[3]), float(ln[4]), float(ln[5]),float(ln[6]), float(ln[7]), float(ln[8]), int(float(ln[8])))
+					self.moveCopyStructure(math_lines, int(ln[1]), int(ln[2]), float(ln[3]), float(ln[4]), float(ln[5]),float(ln[6]), float(ln[7]), float(ln[8]), int(float(ln[9])))
 				elif ln[0].strip() == "GR":
 					self.rotateStructure(math_lines, int(ln[1]), int(ln[2]))
 			else:
