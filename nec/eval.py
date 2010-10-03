@@ -155,7 +155,8 @@ class NecFileObject:
 					self.vars.update(d)
 					self.paramlines[d.keys()[0]]=i
 					try:
-						min, max = eval(comment)
+						#strip the real comment from the comment
+						min, max = eval(comment[0:comment.find("'")].strip(' '))
 						self.min_max[d.keys()[0]]=(float(min),float(max))
 					except:
 						pass
