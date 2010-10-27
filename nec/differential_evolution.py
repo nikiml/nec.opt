@@ -110,7 +110,7 @@ data members:
                eps=1e-2,
                n_cross=1,
                max_iter=10000,
-               monitor_cycle=200,
+               monitor_cycle=100,
                out=None,
                show_progress=False,
                show_progress_nth_cycle=1,
@@ -133,8 +133,6 @@ data members:
     if insert_solution_vector is not None:
       assert len( insert_solution_vector )==self.vector_length
       self.seeded = insert_solution_vector
-    for ii in xrange(self.population_size):
-      self.population.append( self.vector_length*[0.0] )
 
 
     self.scores = self.population_size*[1000.0]
@@ -156,7 +154,7 @@ data members:
     # score the population please
     self.score_population()
     converged = False
-    monitor_score = min_value( self.scores )
+    monitor_score = mean_value( self.scores )
     count = 0
     while not converged:
       self.evolve()
@@ -174,10 +172,10 @@ data members:
 
       count += 1
       if count%self.monitor_cycle==0:
-        if (monitor_score-min_value(self.scores) ) < self.eps:
+        if (monitor_score-mean_value(self.scores) ) < self.eps:
           converged = True
         else:
-         monitor_score = min_value(self.scores)
+         monitor_score = mean_value(self.scores)
       rd = (mean_value(self.scores) - min_value(self.scores) )
       rd = rd*rd/(min_value(self.scores)*min_value(self.scores) + self.eps*self.eps )
       if ( rd < self.eps ):
@@ -188,6 +186,13 @@ data members:
         converged =True
 
   def make_random_population(self):
+    self.population = self.evaluator.initialPopulation()
+    if self.population:
+	    self.population_size = len(self.population)
+	    self.scores = self.population_size*[1000.0]
+	    return
+    for ii in xrange(self.population_size):
+      self.population.append( self.vector_length*[0.0] )
     for ii in xrange(self.vector_length):
       delta  = self.evaluator.domain[ii][1]-self.evaluator.domain[ii][0]
       offset = self.evaluator.domain[ii][0]
@@ -225,7 +230,7 @@ data members:
       x2 = self.population[ i2 ]
       x3 = self.population[ i3 ]
       vi = list(imap(operator.add, x1 , imap(lambda x: self.f*x, imap(operator.sub, x2,x3)))) #v1 = x1 + self.f*(x2-x3)
-      # prepare the offspring vector please
+      # prepare the offspring vector pleaseself.atanhTransform(self.x)
       rnd = random_double(self.vector_length)
       permut = sort_permutation(rnd)
       test_vector = list(self.population[ii]) #self.population[ii].deep_copy()
