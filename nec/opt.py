@@ -7,6 +7,39 @@ import os, math,sys
 from nec import eval as ne
 
 class NecFileEvaluator:
+
+	def parseInitialPopulation(self, file):
+		try:
+			f = open(file,"rt")
+			lines = f.readlines()
+			f.close()
+		except:
+			return []
+		if not lines: return []
+		vars = lines[0].split()
+		del lines[0]
+		for i in range(len(lines)):
+			lines[i] = map(float, lines[i].split())
+		opt_vars = {}
+		for i in range(len(vars)):
+			opt_vars[vars[i]] = i
+
+		population = []
+
+		try:
+			for line in lines:
+				member = []
+				for v in self.opt_vars:
+					pos = opt_vars[v]
+					member.append(line[pos])
+				population.append(self.atanhTransform(member))
+			return population
+		except:
+			print sys.exc_info()[1]
+			return []
+
+
+		
 	def __init__(self, options):
 			#.input, options.output,options.auto_segmentation, options.sweeps, options.target_levels,options.num_cores, options.log_file, options.target_function
 		self.log = None
@@ -37,6 +70,11 @@ class NecFileEvaluator:
 			self.x.append(self.nec_file.vars[var])
 
 		self.x = self.atanhTransform(self.x)
+		if options.restart:
+			self.initial_population = self.parseInitialPopulation(options.restart)
+		else:
+			self.initial_population = []
+
 
 		self.ncores = options.num_cores
 		self.comments = [""]
@@ -75,6 +113,9 @@ class NecFileEvaluator:
 	def __del__(self):
 		if self.log:
 			self.log.close()
+
+	def initialPopulation(self):
+		return list(self.initial_population)
 
 	def targetLevel(self, rangeno, freqno):
 		r = self.ranges[rangeno]
@@ -188,65 +229,67 @@ class NecFileEvaluator:
 			self.nec_file.vars[var]=vector[i]
 
 		results = self.nec_file.runSweeps(self.ranges, self.ncores, cleanup=1)
+		res = -1000
 		if not results:
 			print "writing erroneous file..."
-			self.nec_file.writeParametrized("error%d.nec"%self.errors)
-			print "done"
-			return 1000.0
+			try:
+				self.nec_file.writeParametrized("error%d.nec"%self.errors)
+				print "done"
+			except:
+				print "failed"
+		else:
 
-
-		res = -1000
-		NOP = ne.NecOutputParser
-		try:
-			for r in results:
-				nop = NOP(r[0], self.char_impedance, self.nec_file.angle_step, self.frequency_data)
-				#print "output parsed"
-				sweepid = r[1]
-				for freq in nop.frequencies:
-					freqid = self.freqID(freq.freq, sweepid)
-					if self.frequency_data:
-						tl = self.frequency_data[freq.freq][1]
-					else:
-						tl = self.targetLevel(freqid[0], freqid[1])
-					gain_diff = tl-freq.net()
-					swr_diff = (freq.swr() - self.swr_target)
-					#print "freq %g, target level %g, freqno %d, gaindiff %g, swrdiff %g"%(freq.freq, tl, freqid[0], gain_diff, swr_diff)
-					range_results[freqid[0]].add(gain_diff, swr_diff)
-			d = {}
-			d["max_gain_diff"] = -1000.0
-			d["ave_max_gain_diff"] = 0.0
-			d["max_ave_gain_diff"] = -1000.0
-			d["ave_gain_diff"] = 0.0
-			d["max_swr_diff"] = -1000.0
-			d["ave_max_swr_diff"] = 0.0
-			d["max_ave_swr_diff"] = -1000.0
-			d["ave_swr_diff"] = 0.0
-			freq_count=0
-			for i in range_results:
-				if i.max_gain_diff > d["max_gain_diff"]:
-					d["max_gain_diff"] = i.max_gain_diff
-				if d["max_ave_gain_diff"] < i.gain_diff_sum/i.count:
-					d["max_ave_gain_diff"] = i.gain_diff_sum/i.count
-				d["ave_max_gain_diff"] = d["ave_max_gain_diff"]+i.max_gain_diff
-				d["ave_gain_diff"] = d["ave_gain_diff"] + i.gain_diff_sum
-				if i.max_swr_diff > d["max_swr_diff"]:
-					d["max_swr_diff"] = i.max_swr_diff
-				if d["max_ave_swr_diff"] < i.swr_diff_sum/i.count:
-					d["max_ave_swr_diff"] = i.swr_diff_sum/i.count
-				d["ave_max_swr_diff"] = d["ave_max_swr_diff"]+i.max_swr_diff
-				d["ave_swr_diff"] = d["ave_swr_diff"] + i.swr_diff_sum
-				freq_count = freq_count + i.count
-			d["ave_swr_diff"] = d["ave_swr_diff"]/freq_count
-			d["ave_gain_diff"] = d["ave_gain_diff"]/freq_count
-			d["ave_max_swr_diff"] = d["ave_max_swr_diff"]/len(self.ranges)
-			d["ave_max_gain_diff"] = d["ave_max_gain_diff"]/len(self.ranges)
-
-			#print d
-			res = eval(self.target_function, d)
-
-		except:
-			print sys.exc_info()[1]
-			res = -1000
+			NOP = ne.NecOutputParser
+			try:
+				for r in results:
+					nop = NOP(r[0], r[2], self.char_impedance, self.nec_file.angle_step, self.frequency_data)
+					#print "output parsed"
+					sweepid = r[1]
+					for freq in nop.frequencies:
+						freqid = self.freqID(freq.freq, sweepid)
+						if self.frequency_data:
+							tl = self.frequency_data[freq.freq][1]
+						else:
+							tl = self.targetLevel(freqid[0], freqid[1])
+						gain_diff = tl-freq.net()
+						swr_diff = (freq.swr() - self.swr_target)
+						#print "freq %g, target level %g, freqno %d, gaindiff %g, swrdiff %g"%(freq.freq, tl, freqid[0], gain_diff, swr_diff)
+						range_results[freqid[0]].add(gain_diff, swr_diff)
+				d = {}
+				d["max_gain_diff"] = -1000.0
+				d["ave_max_gain_diff"] = 0.0
+				d["max_ave_gain_diff"] = -1000.0
+				d["ave_gain_diff"] = 0.0
+				d["max_swr_diff"] = -1000.0
+				d["ave_max_swr_diff"] = 0.0
+				d["max_ave_swr_diff"] = -1000.0
+				d["ave_swr_diff"] = 0.0
+				freq_count=0
+				for i in range_results:
+					if i.max_gain_diff > d["max_gain_diff"]:
+						d["max_gain_diff"] = i.max_gain_diff
+					if d["max_ave_gain_diff"] < i.gain_diff_sum/i.count:
+						d["max_ave_gain_diff"] = i.gain_diff_sum/i.count
+					d["ave_max_gain_diff"] = d["ave_max_gain_diff"]+i.max_gain_diff
+					d["ave_gain_diff"] = d["ave_gain_diff"] + i.gain_diff_sum
+					if i.max_swr_diff > d["max_swr_diff"]:
+						d["max_swr_diff"] = i.max_swr_diff
+					if d["max_ave_swr_diff"] < i.swr_diff_sum/i.count:
+						d["max_ave_swr_diff"] = i.swr_diff_sum/i.count
+					d["ave_max_swr_diff"] = d["ave_max_swr_diff"]+i.max_swr_diff
+					d["ave_swr_diff"] = d["ave_swr_diff"] + i.swr_diff_sum
+					freq_count = freq_count + i.count
+				d["ave_swr_diff"] = d["ave_swr_diff"]/freq_count
+				d["ave_gain_diff"] = d["ave_gain_diff"]/freq_count
+				d["ave_max_swr_diff"] = d["ave_max_swr_diff"]/len(self.ranges)
+				d["ave_max_gain_diff"] = d["ave_max_gain_diff"]/len(self.ranges)
+	
+				#print d
+				res = eval(self.target_function, d)
+	
+			except:
+				print sys.exc_info()[1]
+				res = -1000
 		if res == -1000:
 			res = 1000.0
 			
@@ -282,12 +325,13 @@ def optionsParser():
 	class MainOptionParser(ne.OptionParser):
 		def __init__(self):
 			ne.OptionParser.__init__(self)
+			self.add_option("--agt-correction", default="0", type="int", help="set to 1 to enable agt correction. It is slower but more accurate.")
 			self.add_option("-l", "--log-file", default="opt.log",metavar="FILE", help="log file. The default is %default.")
 			self.add_option("-S", "--seed-with-input", default=False, action="store_true", help="use the input file as one of the population members")
 			self.add_option("-t", "--target_level", dest="target_levels" ,metavar="TARGET_LEVEL", action="append", type="string", help="appends target level(s) for a sweep, the number of target levels must match the number of sweeps and they are paired positionally. Examples1: -s (174,6,8) -t (8,9) means target levels linearly increasing from 8 to 9 for the frequencies from 174 to 216. Example2: -s (174,6,8) -t (8, 8.5, 9.5, 9) means target levels of 8 for 174, 9 for 216 and gradually increasing levels from 8.5 to 9.5 for the range 180 to 210")
-			self.add_option("-M", "--max-iter", default=10000, type="int", help="The default is %default. The script can be interupted with Ctrl+C at any time and it will output its current best result as 'output.nec'")
+			self.add_option("-M", "--max-iter", default=10000, type="int", help="The default is %default. The script can be interrupted with Ctrl+C at any time and it will output its current best result as 'output.nec'")
 			self.add_option("-L", "--local-search", action="store_true", default = False)
-			self.add_option("-T", "--local-search-tolerance", default = .001)
+			self.add_option("-T", "--local-search-tolerance", default = .0001, type="float")
 			self.add_option("-F", "--target-function", default = "max(max_gain_diff, max_swr_diff)", type='string', help="The evaluator calculates net gain and swr for each frequency of every sweep range. The optimizer then finds the difference between the gain and its target level and between the swr and its target level, thus calculating 'gain_diff' and 'swr_diff' for each frequency. As a second step it calculates the maximum and the average of those values for each sweep range: 'max_gain_diff', 'ave_gain_diff', 'max_swr_diff', 'ave_swr_diff'. Lastly it uses those value for every range and calculates the following values: 'max_gain_diff' - the absolute maximum of all gain_diffs for all frequencies, 'max_ave_gain_diff' - the maximum of all ave_gain_diffs for all sweep ranges, 'ave_max_gain_diff' - the average of all max_gain_diffs for all sweep ranges, 'ave_gain_diff' the average of all gain_diffs and the four swr counterparts 'max_swr_diff', 'max_ave_swr_diff', 'ave_max_swr_diff', 'ave_swr_diff'. The target function that the optimizer minimizes can be an expression of the last 8 values, by default it is '%default'")
 			self.add_option( "--swr-target", default = 2.0, type='float', help="the default value is %default")
 #			self.add_option( "--desqi", default = False, action="store_true")
@@ -299,6 +343,7 @@ def optionsParser():
 			self.add_option("-f", "--frequency_data", default = "{}", help="a map of frequency to (angle, expected_gain) tuple" )
 			self.add_option("-b", "--output-best", default = -1, help="set to 0 or 1 to output the best score nec file as 'best.nec'. Default is -1 (output if not in local search)." )
 			self.add_option("-p", "--parameters", default = "", help="If not empty restrict the list of optimization parameters to this list." )
+			self.add_option("-r", "--restart", default = "", metavar="RESTART_FILE", help="restart from population saved in a file." )
 
 			
 		def parse_args(self):
@@ -322,6 +367,7 @@ def optionsParser():
 			print options.target_levels
 			print "SWR target level set to: %g:"% options.swr_target
 			print "Target function set to \"%s\"" % options.target_function
+			print "use-agt-correction set to %d"%options.agt_correction
 
 
 			return (options,args)
