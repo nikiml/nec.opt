@@ -151,8 +151,6 @@ data members:
   def optimize(self):
     # initialise the population please
     self.make_random_population()
-    # score the population please
-    self.score_population()
     converged = False
     monitor_score = mean_value( self.scores )
     count = 0
@@ -186,10 +184,12 @@ data members:
         converged =True
 
   def make_random_population(self):
-    self.population = self.evaluator.initialPopulation()
+    self.population,self.scores = self.evaluator.initialPopulation()
     if self.population:
 	    self.population_size = len(self.population)
-	    self.scores = self.population_size*[1000.0]
+	    if not self.scores:
+		    self.scores = self.population_size*[1000.0]
+		    self.score_population()
 	    return
     for ii in xrange(self.population_size):
       self.population.append( self.vector_length*[0.0] )
@@ -205,6 +205,9 @@ data members:
         vector[ii] = item
     if self.seeded is not False:
       self.population[0] = self.seeded
+    # score the population please
+    self.scores = self.population_size*[1000.]
+    self.score_population()
 
   def score_population(self):
     for vector,ii in zip(self.population,xrange(self.population_size)):
@@ -212,6 +215,7 @@ data members:
       self.scores[ii]=tmp_score
 
   def evolve(self):
+    new_population=[[]]*self.population_size
     for ii in xrange(self.population_size):
       rnd = random_double(self.population_size-1)
       permut = sort_permutation(rnd)
@@ -246,7 +250,10 @@ data members:
       # check if the score if lower
       if test_score < self.scores[ii] :
         self.scores[ii] = test_score
-        self.population[ii] = test_vector
+        new_population[ii] = test_vector
+    for ii in xrange(self.population_size):
+      if new_population[ii]:
+        self.population[ii]=new_population[ii]
     if self.plugin:
       print "Postevolving ..."
       res = self.plugin.postEvolve(self)

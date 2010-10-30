@@ -14,8 +14,8 @@ class NecFileEvaluator:
 			lines = f.readlines()
 			f.close()
 		except:
-			return []
-		if not lines: return []
+			return ([],[])
+		if not lines: return ([],[])
 		vars = lines[0].split()
 		del lines[0]
 		for i in range(len(lines)):
@@ -25,6 +25,7 @@ class NecFileEvaluator:
 			opt_vars[vars[i]] = i
 
 		population = []
+		scores = []
 
 		try:
 			for line in lines:
@@ -33,10 +34,12 @@ class NecFileEvaluator:
 					pos = opt_vars[v]
 					member.append(line[pos])
 				population.append(self.atanhTransform(member))
-			return population
+				if "Score" in opt_vars:
+					scores.append(line[opt_vars["Score"]])
+			return (population,scores)
 		except:
 			print sys.exc_info()[1]
-			return []
+			return ([],[])
 
 
 		
@@ -71,10 +74,10 @@ class NecFileEvaluator:
 
 		self.x = self.atanhTransform(self.x)
 		if options.restart:
-			self.initial_population = self.parseInitialPopulation(options.restart)
+			self.initial_population, self.initial_scores = self.parseInitialPopulation(options.restart)
 		else:
 			self.initial_population = []
-
+			self.initial_scores = []
 
 		self.ncores = options.num_cores
 		self.comments = [""]
@@ -115,7 +118,7 @@ class NecFileEvaluator:
 			self.log.close()
 
 	def initialPopulation(self):
-		return list(self.initial_population)
+		return (list(self.initial_population),list(self.initial_scores))
 
 	def targetLevel(self, rangeno, freqno):
 		r = self.ranges[rangeno]
@@ -368,6 +371,7 @@ def optionsParser():
 			print "SWR target level set to: %g:"% options.swr_target
 			print "Target function set to \"%s\"" % options.target_function
 			print "use-agt-correction set to %d"%options.agt_correction
+			options.forward = not options.frequency_data
 
 
 			return (options,args)

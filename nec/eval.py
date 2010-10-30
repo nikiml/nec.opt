@@ -131,6 +131,7 @@ class NecFileObject:
 		self.angle_step = 5
 		self.agt_correction= options.agt_correction
 		self.min_wire_distance = options.min_wire_distance
+		self.forward = options.forward
 		if self.sourcefile:
 			self.readSource(self.sourcefile)
 			try:
@@ -535,7 +536,10 @@ class NecFileObject:
 		#lines.append("FR 0 1 0 0 %g 0"%sweep[0])
 		#lines.append("XQ")
 		lines.append("FR 0 %d 0 0 %g %g"%(sweep[2],sweep[0],sweep[1]))
-		lines.append("RP 0 1 73 1000 90 0 0 %d"%self.angle_step)
+		if self.forward: 
+			lines.append("RP 0 1 1 1000 90 0 0 0")
+		else:
+			lines.append("RP 0 1 73 1000 90 0 0 %d"%self.angle_step)
 		lines.append("XQ")
 		return lines
 #		self.writeNecInput(filename, lines, ["FR", "XQ", "RP", "EN"])
@@ -743,6 +747,7 @@ def optionParser():
 			self.add_option("--agt-correction", default="1", type="int", help="set to 0 to disable agt correction. It is faster but less accurate.")
 			self.add_option("-c", "--centers", default=True, help="run sweep on the channel centers",action="store_false", dest="ends")
 			self.add_option("-f", "--frequency_data", default = "{}", help="a map of frequency to (angle, expected_gain) tuple" )
+			self.add_option("--forward", default="1", type="int", help="only forward gain is calculated")
 		def parse_args(self):
 			options, args = OptionParser.parse_args(self)
 			options.frequency_data = eval(options.frequency_data)
