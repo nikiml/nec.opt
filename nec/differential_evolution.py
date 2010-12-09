@@ -115,7 +115,8 @@ data members:
                show_progress=False,
                show_progress_nth_cycle=1,
                insert_solution_vector=None,
-         plugin = None):
+         plugin = None,
+	 dither = .0):
     self.show_progress=show_progress
     self.show_progress_nth_cycle=show_progress_nth_cycle
     self.evaluator = evaluator
@@ -130,6 +131,7 @@ data members:
     self.population = []
     self.seeded = False
     self.plugin = plugin
+    self.dither = min(dither, f, 1-f)
     if insert_solution_vector is not None:
       assert len( insert_solution_vector )==self.vector_length
       self.seeded = insert_solution_vector
@@ -176,7 +178,8 @@ data members:
          monitor_score = mean_value(self.scores)
       rd = (mean_value(self.scores) - min_value(self.scores) )
       rd = rd*rd/(min_value(self.scores)*min_value(self.scores) + self.eps*self.eps )
-      if ( rd < self.eps ):
+      if ( rd < self.eps*self.eps ):
+        print "converged by mean to min score difference rd=%g"%rd
         converged = True
 
 
@@ -233,7 +236,10 @@ data members:
       x1 = self.population[ i1 ]
       x2 = self.population[ i2 ]
       x3 = self.population[ i3 ]
-      vi = list(imap(operator.add, x1 , imap(lambda x: self.f*x, imap(operator.sub, x2,x3)))) #v1 = x1 + self.f*(x2-x3)
+      use_f = self.f
+      if self.dither!=.0:
+	      use_f = use_f+self.dither*(random.random()-.5)
+      vi = list(imap(operator.add, x1 , imap(lambda x: use_f*x, imap(operator.sub, x2,x3)))) #v1 = x1 + self.f*(x2-x3)
       # prepare the offspring vector pleaseself.atanhTransform(self.x)
       rnd = random_double(self.vector_length)
       permut = sort_permutation(rnd)
@@ -374,4 +380,45 @@ class SimplexPlugin:
                         res.append((ind[i],xs,fxs))
                     
     return res
-        
+       
+
+
+class test_rosenbrock_function(object):
+	def __init__(self, dim=5):
+		self.x = None
+		self.n = 2*dim
+		self.dim = dim
+		self.domain = [ (-10,10) ]*self.n
+		self.optimizer = differential_evolution_optimizer(self,population_size=self.n*10,n_cross=self.n*2,eps=1e-8, show_progress=True)
+		for x in self.x:
+			assert abs(x-1.0)<1e-2
+	
+	
+	def target(self, vector):
+		tmp = list(vector)
+		x_vec = vector[0:self.dim]
+		y_vec = vector[self.dim:]
+		result=0
+		for x,y in zip(x_vec,y_vec):
+			result+=100.0*((y-x*x)**2.0) + (1-x)**2.0
+		#print list(x_vec), list(y_vec), result
+		return result
+	
+	def print_status(self, mins,means,vector,txt):
+		print mins, means, list(vector)
+	def initialPopulation(self):
+		return [], []
+	def iterationCallback(self, count,population,scores):
+		print count
+		pass
+	
+	
+def run():
+	random.seed(0)
+	test_rosenbrock_function()
+	print "OK"
+	
+	
+if __name__ == "__main__":
+	run() 
+

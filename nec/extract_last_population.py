@@ -1,6 +1,6 @@
 from demathutils import mean_value, min_value
 
-def parseLogFile(filename, np, full, number_of_lines):
+def parseLogFile(filename, np, full, number_of_lines, population_number):
 	f = open(filename,"rt")
 	lines = f.readlines()
 	f.close()
@@ -39,8 +39,10 @@ def parseLogFile(filename, np, full, number_of_lines):
 		if not number_of_lines or len(lines) < (number_of_lines-(not full))*np:
 			print "Iteration %d [%.6g:%.6g] - %d new offsprings - "%(count,min_value(scores), mean_value(scores),len(k)) + str(k).replace("'","")
 		count = count +1
+		if population_number and count == population_number:
+			break
 
-	if not full and len(lines):
+	if not full and len(lines) and not population_number:
 		k=[]
 		for i in range(len(lines)):
 			ln = lines[i].split()
@@ -66,8 +68,9 @@ if __name__ == "__main__":
 	options.add_option("-p", "--progress-only", default=False,action="store_true")
 	options.add_option("-n", "--number-of-lines", default=0,type="int")
 	options.add_option("-N", "--output-line-numbers", default=False, action="store_true")
+	options.add_option("-c", "--generation-count", default=0, type="int")
 	opts, args = options.parse_args()
-	p = parseLogFile(opts.log_file, opts.de_np, opts.full, opts.number_of_lines)
+	p = parseLogFile(opts.log_file, opts.de_np, opts.full, opts.number_of_lines,opts.generation_count)
 	if opts.progress_only:exit(0)
 	if not p:
 		print "Failed to extract population"

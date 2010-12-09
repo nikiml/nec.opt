@@ -16,6 +16,12 @@ class NecFileEvaluator:
 		except:
 			return ([],[])
 		if not lines: return ([],[])
+		start = 0
+		for i in xrange(len(lines)):
+			l = lines[i].split()
+			if l and l[0].strip()=="Score":
+				start=i
+		del lines[0:start]
 		vars = lines[0].split()
 		del lines[0]
 		for i in range(len(lines)):
@@ -29,6 +35,8 @@ class NecFileEvaluator:
 
 		try:
 			for line in lines:
+				if not line:
+					continue
 				member = []
 				for v in self.opt_vars:
 					pos = opt_vars[v]
@@ -38,6 +46,7 @@ class NecFileEvaluator:
 					scores.append(line[opt_vars["Score"]])
 			return (population,scores)
 		except:
+			raise
 			print sys.exc_info()[1]
 			return ([],[])
 
@@ -49,6 +58,7 @@ class NecFileEvaluator:
 		self.target_function = options.target_function
 		self.char_impedance = options.char_impedance
 		self.nec_file = ne.NecFileObject(options)
+		self.nec_file.calc_gain = (self.target_function.find("gain")!=-1)
 		self.nec_file.autoSegmentation(options.auto_segmentation)
 		self.output_population = options.output_population
 		self.output_best = options.output_best
@@ -339,6 +349,7 @@ def optionsParser():
 			self.add_option( "--swr-target", default = 2.0, type='float', help="the default value is %default")
 #			self.add_option( "--desqi", default = False, action="store_true")
 #			self.add_option( "--nmde", default = False, action="store_true")
+			self.add_option( "--de-dither", default = .2, type="float")
 			self.add_option( "--de-f", default = 0.6, type="float", help="The DE's differential parameter. Should be >.5, the default is %default")
 			self.add_option( "--de-cr", default = 0.9, type="float", help = "The DE's crossover parameter. Should be > .8, the default is %default")
 			self.add_option( "--de-np", default = 50, type="int", help="The DE's population size parameter. The literature recommends to use 10*(optimization_parameters). The defaults is %default")
@@ -390,7 +401,7 @@ def main():
 			de_plugin = None
 			#if options.desqi:
 			#	de_plugin = DE.DESQIPlugin()
-			optimiser = DE.differential_evolution_optimizer(evaluator, population_size = options.de_np, f = options.de_f, cr = options.de_cr, show_progress=1, insert_solution_vector=ins_sol_vec, max_iter=options.max_iter, plugin = de_plugin)
+			optimiser = DE.differential_evolution_optimizer(evaluator, population_size = options.de_np, f = options.de_f, cr = options.de_cr, show_progress=1, insert_solution_vector=ins_sol_vec, max_iter=options.max_iter, plugin = de_plugin, dither=options.de_dither)
 		else:
 			#from scipy import optimize
 			import simplex

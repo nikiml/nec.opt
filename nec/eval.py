@@ -18,6 +18,7 @@ class FrequencyData:
 		self.gain = 0
 		self.char_imp = char_imp
 		self.angle = 0
+
 	def swr(self):
 		rc = necmath.sqrt( \
 			(necmath.pow(self.real-self.char_imp,2)+necmath.pow(self.imag,2)) \
@@ -30,9 +31,11 @@ class FrequencyData:
 			return 1
 		except:
 			return 0
-	def net(self):
+	def net(self, g = None):
+		if g is None:
+			g = self.gain
 		tmp = 4*max(self.real,.0001)*self.char_imp/(necmath.pow(self.real+self.char_imp,2)+necmath.pow(self.imag,2))
-		return self.gain+10*necmath.log10(tmp)
+		return g+10*necmath.log10(tmp)
 		
 	def __str__(self):
 		return "%d Mhz - raw(%f), net(%f), swr(%f), real(%f), imag(%f)"%(int(self.freq), self.gain, self.net(), self.swr(), self.real, self.imag)
@@ -45,6 +48,8 @@ class NecOutputParser:
 		self.frequency_angle_data=frequency_angle_data
 		self.angle_step = angle_step
 		self.agt = 10*necmath.log10(agt)
+		self.horizontal_pattern = {}
+		self.vertical_pattern = {}
 		if output:
 			self.parse(output)
 
@@ -53,8 +58,8 @@ class NecOutputParser:
 			if header: 
 				print "%6s %7s %7s %7s %7s %7s"%("Freq", "RawGain", "NetGain", "SWR", "Real", "Imag")
 				print "================================================"
-			if self.agt!=0:
-				print "AGT=%g dB"%self.agt
+			#if self.agt!=0:
+			#	print "AGT=%g dB"%self.agt
 			for i in self.frequencies:
 				if not i.valid():
 					print "%6.4g - invalid result"%i.freq
@@ -70,6 +75,12 @@ class NecOutputParser:
 				else:
 					target = self.frequency_angle_data[i.freq][1]
 					print "%6.4g %6.2g %6.2g % 7.5g % 7.5g %7.5g %7.5g % 7.5g % 7.5g"%(int(i.freq), target, i.angle, i.gain, i.net(),i.swr(), i.real, i.imag, target-i.net())
+	def getGainSWRChartData(self):
+		res = []
+		for i in self.frequencies:
+			res.append((int(i.freq), i.net(),i.swr()))
+		return res
+
 
 	def parse(self, output):
 		file = open(output, "rt")
@@ -98,13 +109,25 @@ class NecOutputParser:
 					angle = self.frequency_angle_data[freq][0]
 				while len(lines[i].strip()):
 					ln = lines[i]
-					theta = float(ln[0:8])
-					phi = float(ln[8:17])
-					if theta==90 and abs(phi-angle)<=self.angle_step*.5:
-						self.frequencies[-1].gain = float(ln[28:36])-self.agt
-						self.frequencies[-1].angle = angle
+					if ln[0]=="*" or len(ln) < 8 :break
+					try:
+						theta = float(ln[0:8])
+						phi = float(ln[8:17])
+						gain = float(ln[28:36])-self.agt
+						if theta==90 :
+							if not freq in self.horizontal_pattern:
+								self.horizontal_pattern[freq]=[]
+							self.horizontal_pattern[freq].append(self.frequencies[-1].net(gain))
+						if phi == 0:
+							if not freq in self.vertical_pattern:
+								self.vertical_pattern[freq]=[]
+							self.vertical_pattern[freq].append(self.frequencies[-1].net(gain))
+						if theta==90 and abs(phi-angle)<=self.angle_step*.5:
+							self.frequencies[-1].gain = gain
+							self.frequencies[-1].angle = angle
+						i = i+1
+					except:
 						break
-					i = i+1
 			i = i+1
 		if self.frequency_angle_data:
 			freqs = []
@@ -132,6 +155,9 @@ class NecFileObject:
 		self.agt_correction= options.agt_correction
 		self.min_wire_distance = options.min_wire_distance
 		self.forward = options.forward
+		self.calc_gain=1
+		try:self.write_js_model = options.js_model
+		except AttributeError: self.write_js_model=0
 		if self.sourcefile:
 			self.readSource(self.sourcefile)
 			try:
@@ -154,10 +180,16 @@ class NecFileObject:
 		self.dependent_vars = []
 		self.varlines=[]
 		self.source_tags={}
+		self.comments = []
 		for i in xrange(len(self.lines)):
-			ln = self.lines[i]
-			comment = ln[ln.find("'")+1:]
-			ln = ln[0:ln.find("'")].strip(' ')
+			ln = self.lines[i].strip('\n')
+			comment_pos = ln.find("'")
+			if comment_pos!=-1:
+				comment = ln[comment_pos+1:]
+				ln = ln[0:comment_pos].strip(' ')
+			else:
+				comment = ""
+				ln = ln.strip(' ')
 			if ln[0:2]== "SY":
 				try:
 					d = {}
@@ -166,7 +198,10 @@ class NecFileObject:
 					self.paramlines[d.keys()[0]]=i
 					try:
 						#strip the real comment from the comment
-						min, max = eval(comment[0:comment.find("'")].strip(' '))
+						comment_pos = comment.find("'")
+						if comment_pos!=-1:
+							comment = comment[0:comment_pos]
+						min, max = eval(comment.strip(' '))
 						self.min_max[d.keys()[0]]=(float(min),float(max))
 					except:
 						pass
@@ -174,6 +209,7 @@ class NecFileObject:
 					self.dependent_vars.append(ln[3:].strip())
 			else:
 				self.varlines.append(ln.replace(',',' ').split())
+				self.comments.append(comment);
 				if ln[0:2]=="EX":
 					self.source_tags[int(self.varlines[-1][2])]=(len(self.varlines)-1,i)
 				elif ln[0:2] == "FR":
@@ -368,11 +404,12 @@ class NecFileObject:
 
 		return 1
 
-	def mirrorStructure(self, lines, tincr, x,y,z):
+	def mirrorStructure(self, lines,comments, tincr, x,y,z):
 		#print "mirroring"
 		l = len(lines)
 		for i in range(l):
 			lines.append(list(lines[i]))
+			comments.append(comments[i])
 			if lines[l+i][0]:
 				lines[l+i][0]=lines[i][0]+tincr
 			if x:
@@ -413,7 +450,7 @@ class NecFileObject:
 			lines[i][2:5]=s
 			lines[i][5:8]=e
 
-	def moveCopyStructure(self, lines, tincr, new_structures, rx, ry,rz, x,y,z, from_tag):
+	def moveCopyStructure(self, lines,comments, tincr, new_structures, rx, ry,rz, x,y,z, from_tag):
 		#print "moving %d lines, incrementing tags with %d, starting from tag %d"%(len(lines),tincr, from_tag)
 		l = len(lines)
 		rng = (0, l)
@@ -433,20 +470,22 @@ class NecFileObject:
 			new_structures = new_structures-1
 			for i in range(rng[0],rng[1]):
 				lines.append(list(lines[i]))
+				comments.append(comments[i])
 
 			rng = (l,len(lines))
 			l = len(lines)
 			self.moveStructure(lines, rng, tincr, rx,ry,rz,x,y,z)
 
 
-	def rotateStructure(self, lines, tincr, nstructures):
+	def rotateStructure(self, lines,comments, tincr, nstructures):
 		if nstructures<=1:
 			return
-		self.moveCopyStructure(lines, tincr, nstructures-1, 0, 0,360.0/nstructures, 0,0,0, 0)
+		self.moveCopyStructure(lines,comments, tincr, nstructures-1, 0, 0,360.0/nstructures, 0,0,0, 0)
 
 	def necInputLines(self, skiptags=["FR", "XQ", "RP", "EN"]):
 		lines=[]
 		math_lines = []
+		comments = []
 		self.globals={}
 		self.globals.update(self.vars)
 		for d in self.dependent_vars:
@@ -454,31 +493,55 @@ class NecFileObject:
 			except:
 				print "failed parsing '%s'"%(d)
 				raise
-		for ln in self.varlines:
+		for li in range(len(self.varlines)):
+			ln = self.varlines[li]
+			comment = self.comments[li]
 			if not ln: continue
 			if ln[0].strip() != "GW":
 				if ln[0].strip() not in skiptags:
 					lines.append(" ".join(ln))
 				if ln[0].strip() == "GX":
-					self.mirrorStructure(math_lines, int(ln[1]), int(ln[2][0]), int(ln[2][1]), int(ln[2][2]))
+					self.mirrorStructure(math_lines,comments, int(ln[1]), int(ln[2][0]), int(ln[2][1]), int(ln[2][2]))
 				elif ln[0].strip() == "GM":
 					if len(ln) < 9:
 						ln=ln+(9-len(ln))*[.0]
-					self.moveCopyStructure(math_lines, int(ln[1]), int(ln[2]), float(ln[3]), float(ln[4]), float(ln[5]),float(ln[6]), float(ln[7]), float(ln[8]), int(float(ln[9])))
+					self.moveCopyStructure(math_lines,comments, int(ln[1]), int(ln[2]), self.evalToken(ln[3]), self.evalToken(ln[4]), self.evalToken(ln[5]),self.evalToken(ln[6]), self.evalToken(ln[7]), self.evalToken(ln[8]), int(float(ln[9])))
+					if not "GM" in skiptags:
+						lines[-1]="GM %d %d %f %f %f %f %f %f %d"%tuple(map(int,ln[1:3])+map(self.evalToken,ln[3:9])+[int(float(ln[9]))])
 				elif ln[0].strip() == "GR":
-					self.rotateStructure(math_lines, int(ln[1]), int(ln[2]))
+					self.rotateStructure(math_lines,comments, int(ln[1]), int(ln[2]))
 			else:
 				sline = map( self.evalToken , ln[1:])
 				math_lines.append(list(sline))
+				comments.append(comment)
 				if self.autosegment[0]:
 					self.autoSegment(sline)
 				sline = map(self.formatNumber, sline)
 				sline.insert(0, ln[0])
 				lines.append(" ".join(sline))
 		del self.globals
+		if self.write_js_model:
+			self.writeJSModel(math_lines,comments)
 		if not self.testLineIntersections(math_lines):
 			return []
 		return lines
+
+	def writeJSModel(self, lines, comments):
+		z = zip(comments,lines)
+		z.sort()
+		print "var structure = [["
+		if not z:
+			print "]]"
+			return;
+		c = z[0][0].strip()
+		print '"%s"'%c
+		for i in z:
+			if i[0].strip() != c:
+				c = i[0].strip()
+				print '], ["%s"'%c
+			ln = i[1]
+			print (",%.4f"*6) % tuple(ln[2:8])
+		print "]]"
 
 	def writeNecInput(self, filename, extralines=[], skiptags=[]):
 		lines = self.necInputLines(skiptags)
@@ -507,17 +570,24 @@ class NecFileObject:
 				raise
 		has_comments = 0
 		for ln in self.lines:
+			comment_pos = ln.find("'")
+			if comment_pos!=-1:
+				comment = ln[comment_pos:].strip('\n')
+				ln = ln[0:comment_pos].strip(' ')
+			else:
+				comment = ""
+				ln = ln.strip(' ')
 			sl = ln.replace(',',' ').split()
 			if sl and sl[0].strip() == "CE":
 				has_comments=1
 			if not sl or not self.autosegment[0] or sl[0].strip() != "GW" : 
-				lines.append(ln.strip())
+				lines.append(ln.strip()+comment)
 				continue
 			if sl[0].strip() == "GW":
 				sline = map( self.evalToken , sl[1:])
 				self.autoSegment(sline)
 				sl[2] = str(sline[1])
-				lines.append(" ".join(sl))
+				lines.append(" ".join(sl)+comment)
 
 		del self.globals
 		lines.extend(extralines)
@@ -536,11 +606,17 @@ class NecFileObject:
 		#lines.append("FR 0 1 0 0 %g 0"%sweep[0])
 		#lines.append("XQ")
 		lines.append("FR 0 %d 0 0 %g %g"%(sweep[2],sweep[0],sweep[1]))
-		if self.forward: 
-			lines.append("RP 0 1 1 1000 90 0 0 0")
+		if self.calc_gain:
+			if self.forward: 
+				lines.append("RP 0 1 1 1000 90 0 0 0")
+			else:
+				lines.append("RP 0 1 73 1000 90 0 0 %d"%self.angle_step)
+			lines.append("XQ")
 		else:
-			lines.append("RP 0 1 73 1000 90 0 0 %d"%self.angle_step)
-		lines.append("XQ")
+			lines.append("PQ -1")
+			lines.append("PT -1")
+			lines.append("XQ")
+			lines.append("EN")
 		return lines
 #		self.writeNecInput(filename, lines, ["FR", "XQ", "RP", "EN"])
 	def agtLines(self, nec_input_lines, sweep):
@@ -695,20 +771,53 @@ class NecFileObject:
 			r.append(results[i])
 		return r
 
-	def evaluate(self, sweeps, char_impedance, num_cores=1, cleanup=0, frequency_data = {}):
+	def evaluate(self, sweeps, char_impedance, num_cores=1, cleanup=0, frequency_data = {}, chart_like=0):
 		NOP = NecOutputParser 
 		results = self.runSweeps(sorted(sweeps), num_cores, cleanup) #[[174,6,8],[470,6,40]]
-		print "Input file : %s"%self.sourcefile 
-		print "Freq sweeps: %s"%str(sweeps)
-		if self.autosegment[0]:
-			print "Autosegmentation: %d per %g"%self.autosegment
-		else:
-			"Autosegmentation: NO"
-		print "\n"
+		h={}
+		v={}
+		if not chart_like:
+			print "Input file : %s"%self.sourcefile 
+			print "Freq sweeps: %s"%str(sweeps)
+			if self.autosegment[0]:
+				print "Autosegmentation: %d per %g"%self.autosegment
+			else:
+				"Autosegmentation: NO"
+			print "\n"
 	
-		for r in range(len(results)):
-			nop = NOP(results[r][0], results[r][2], char_impedance, self.angle_step, frequency_data)
-			nop.printFreqs(r==0)
+			for r in range(len(results)):
+				nop = NOP(results[r][0], results[r][2], char_impedance, self.angle_step, frequency_data)
+				h.update(nop.horizontal_pattern)
+				v.update(nop.vertical_pattern)
+				nop.printFreqs(r==0)
+		else:
+			res = [];
+			for r in range(len(results)):
+				nop = NOP(results[r][0], results[r][2], char_impedance, self.angle_step, frequency_data)
+				h.update(nop.horizontal_pattern)
+				v.update(nop.vertical_pattern)
+				res = res+nop.getGainSWRChartData()
+			res.sort()
+			g = self.sourcefile+"_gain"
+			for i in res: g+=(",%.2f"%i[1])
+			s = self.sourcefile+"_swr"
+			for i in res: s+=(",%.2f"%i[2])
+			print g
+			print s
+
+		if self.write_js_model:
+			print "Horizontal:"
+			print sorted(h.keys())
+			for i in sorted(h.keys()):
+				l = len(h[i])/2+1;
+				print "["+("%.2f,"*l)[0:-1]%tuple(h[i][0:l])+"],"
+
+			print "Vertical:"
+			print sorted(v.keys())
+			for i in sorted(v.keys()):
+				l = len(v[i])/2+1;
+				print "["+("%.2f,"*l)[0:-1]%tuple(v[i][0:l])+"],"
+				
 
 
 import optparse 
@@ -726,7 +835,7 @@ class OptionParser(optparse.OptionParser):
 		self.add_option("-n", "--num-cores", type="int", default=ncores, help="number of cores to be used, default=%default")
 		self.add_option("-a", "--auto-segmentation", metavar="NUM_SEGMENTS", type="int", default=autosegmentation, help="autosegmentation level - set to 0 to turn autosegmentation off, default=%default")
 		self.add_option("-e", "--engine", metavar="NEC_ENGINE", default="nec2dxs1k5.exe", help="nec engine file name, default=%default")
-		self.add_option("-d", "--min-wire-distance", default=".005", type="float", help="minimum surface-to-surface distance allowed between non-connecting wires, default=%default")
+		self.add_option("-d", "--min-wire-distance", default=.005, type="float", help="minimum surface-to-surface distance allowed between non-connecting wires, default=%default")
 	def parse_args(self):
 		options, args = optparse.OptionParser.parse_args(self)
 		if options.input == "":
@@ -744,10 +853,12 @@ def optionParser():
 		def __init__(self):
 			OptionParser.__init__(self)
 			self.add_option("--param-values-file", default="", help="Read the parameter values from file, generate output.nec and evaluate it instead of the input file. The file should contain two lines: space separated parameter name son the first and space separated values on the second.")
-			self.add_option("--agt-correction", default="1", type="int", help="set to 0 to disable agt correction. It is faster but less accurate.")
+			self.add_option("--agt-correction", default=1, type="int", help="set to 0 to disable agt correction. It is faster but less accurate.")
 			self.add_option("-c", "--centers", default=True, help="run sweep on the channel centers",action="store_false", dest="ends")
 			self.add_option("-f", "--frequency_data", default = "{}", help="a map of frequency to (angle, expected_gain) tuple" )
-			self.add_option("--forward", default="1", type="int", help="only forward gain is calculated")
+			self.add_option("--forward", default=0, action="store_true", help="only forward gain is calculated")
+			self.add_option("--chart", default=0, action="store_true")
+			self.add_option("--js-model", default=0, action="store_true", help="write jsmodel")
 		def parse_args(self):
 			options, args = OptionParser.parse_args(self)
 			options.frequency_data = eval(options.frequency_data)
@@ -764,7 +875,7 @@ def optionParser():
 def run(options):
 	nf = NecFileObject(options)
 	nf.autoSegmentation(options.auto_segmentation)
-	nf.evaluate(options.sweeps, options.char_impedance, options.num_cores, 0, options.frequency_data)
+	nf.evaluate(options.sweeps, options.char_impedance, options.num_cores, 0, options.frequency_data,options.chart)
 
 def main():
 #default values
