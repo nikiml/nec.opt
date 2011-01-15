@@ -64,6 +64,8 @@ class NecFileEvaluator:
 		self.output_best = options.output_best
 		self.parameters = options.parameters
 		
+		self.omni= options.omni
+
 		self.ranges = options.sweeps
 		self.target_levels = options.target_levels
 		self.swr_target = options.swr_target
@@ -255,7 +257,7 @@ class NecFileEvaluator:
 			NOP = ne.NecOutputParser
 			try:
 				for r in results:
-					nop = NOP(r[0], r[2], self.char_impedance, self.nec_file.angle_step, self.frequency_data)
+					nop = NOP(r[0], r[2], self.char_impedance, self.nec_file.angle_step, self.frequency_data,self.omni)
 					#print "output parsed"
 					sweepid = r[1]
 					for freq in nop.frequencies:
@@ -358,6 +360,7 @@ def optionsParser():
 			self.add_option("-b", "--output-best", default = -1, help="set to 0 or 1 to output the best score nec file as 'best.nec'. Default is -1 (output if not in local search)." )
 			self.add_option("-p", "--parameters", default = "", help="If not empty restrict the list of optimization parameters to this list." )
 			self.add_option("-r", "--restart", default = "", metavar="RESTART_FILE", help="restart from population saved in a file." )
+			self.add_option("--omni", default=0, action="store_true", help="parse all horizontal angles")
 
 			
 		def parse_args(self):
@@ -382,7 +385,7 @@ def optionsParser():
 			print "SWR target level set to: %g:"% options.swr_target
 			print "Target function set to \"%s\"" % options.target_function
 			print "use-agt-correction set to %d"%options.agt_correction
-			options.forward = not options.frequency_data
+			options.forward = not options.frequency_data and not options.omni
 
 
 			return (options,args)

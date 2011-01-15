@@ -42,7 +42,7 @@ class FrequencyData:
 
 
 class NecOutputParser:
-	def __init__(self, output, agt=1, char_imp = 300, angle_step = 5, frequency_angle_data={}):
+	def __init__(self, output, agt=1, char_imp = 300, angle_step = 5, frequency_angle_data={}, omni=0):
 		self.frequencies = []
 		self.char_imp = char_imp
 		self.frequency_angle_data=frequency_angle_data
@@ -50,6 +50,7 @@ class NecOutputParser:
 		self.agt = 10*necmath.log10(agt)
 		self.horizontal_pattern = {}
 		self.vertical_pattern = {}
+		self.omni = omni
 		if output:
 			self.parse(output)
 
@@ -89,42 +90,53 @@ class NecOutputParser:
 		finally:
 			file.close()
 		i=0
+		freq = 0
+		real = 0
+		imag = 0
 		while i < len(lines):
 			ln = lines[i].strip()
 			if ln == "- - - - - - FREQUENCY - - - - - -":
 				i = i+2
 				freq = float(lines[i].strip()[10:-4])
-				if not len(self.frequencies) or self.frequencies[-1].valid():
-					self.frequencies.append(FrequencyData(self.char_imp))
-				self.frequencies[-1].freq = freq
+#				if not len(self.frequencies) or self.frequencies[-1].valid():
+#					self.frequencies.append(FrequencyData(self.char_imp))
+#				self.frequencies[-1].freq = freq
 			elif ln == "- - - ANTENNA INPUT PARAMETERS - - -":
 				i=i+4
-				self.frequencies[-1].real = float(lines[i][60:72])
-				self.frequencies[-1].imag = float(lines[i][72:84])
+				real = float(lines[i][60:72])
+				imag = float(lines[i][72:84])
+#				self.frequencies[-1].real = float(lines[i][60:72])
+#				self.frequencies[-1].imag = float(lines[i][72:84])
 			elif ln =="- - - RADIATION PATTERNS - - -":
 				i=i+5
 				angle = 0
-				freq = self.frequencies[-1].freq
+#				freq = self.frequencies[-1].freq
 				if freq in self.frequency_angle_data.keys():
 					angle = self.frequency_angle_data[freq][0]
 				while len(lines[i].strip()):
 					ln = lines[i]
 					if ln[0]=="*" or len(ln) < 8 :break
 					try:
+						fd = FrequencyData(self.char_imp)
+						fd.real = real
+						fd.imag = imag
+						fd.freq = freq
+
 						theta = float(ln[0:8])
 						phi = float(ln[8:17])
 						gain = float(ln[28:36])-self.agt
 						if theta==90 :
 							if not freq in self.horizontal_pattern:
 								self.horizontal_pattern[freq]=[]
-							self.horizontal_pattern[freq].append(self.frequencies[-1].net(gain))
+							self.horizontal_pattern[freq].append(fd.net(gain))
 						if phi == 0:
 							if not freq in self.vertical_pattern:
 								self.vertical_pattern[freq]=[]
-							self.vertical_pattern[freq].append(self.frequencies[-1].net(gain))
-						if theta==90 and abs(phi-angle)<=self.angle_step*.5:
-							self.frequencies[-1].gain = gain
-							self.frequencies[-1].angle = angle
+							self.vertical_pattern[freq].append(fd.net(gain))
+						if theta==90 and (abs(phi-angle)<=self.angle_step*.5 or self.omni):
+							fd.gain = gain
+							fd.angle = angle
+							self.frequencies.append(fd)
 						i = i+1
 					except:
 						break
@@ -859,6 +871,7 @@ def optionParser():
 			self.add_option("--forward", default=0, action="store_true", help="only forward gain is calculated")
 			self.add_option("--chart", default=0, action="store_true")
 			self.add_option("--js-model", default=0, action="store_true", help="write jsmodel")
+			self.add_option("--cleanup", default=0, action="store_true", help="remove output")
 		def parse_args(self):
 			options, args = OptionParser.parse_args(self)
 			options.frequency_data = eval(options.frequency_data)
@@ -875,7 +888,7 @@ def optionParser():
 def run(options):
 	nf = NecFileObject(options)
 	nf.autoSegmentation(options.auto_segmentation)
-	nf.evaluate(options.sweeps, options.char_impedance, options.num_cores, 0, options.frequency_data,options.chart)
+	nf.evaluate(options.sweeps, options.char_impedance, options.num_cores, options.cleanup, options.frequency_data,options.chart)
 
 def main():
 #default values

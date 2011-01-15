@@ -1,5 +1,9 @@
 from demathutils import mean_value, min_value
 
+def floatOrNone(s):
+	if s== "None":return None
+	return float(s)
+
 def parseLogFile(filename, np, full, number_of_lines, population_number):
 	f = open(filename,"rt")
 	lines = f.readlines()
@@ -22,7 +26,7 @@ def parseLogFile(filename, np, full, number_of_lines, population_number):
 	for i in range(np):
 		ln = lines[i].split()
 		scores.append(float(ln[0]))
-		population.append(map(float, ln[1:]))
+		population.append(map(floatOrNone, ln[1:]))
 	
 	lines = lines[np:]
 	count = 1
@@ -34,7 +38,7 @@ def parseLogFile(filename, np, full, number_of_lines, population_number):
 			if s < scores[i]:
 				k.append((i,"%.4g"%s))
 				scores[i] = s
-				population[i] = map(float, ln[1:])
+				population[i] = map(floatOrNone, ln[1:])
 		lines = lines[np:]
 		if not number_of_lines or len(lines) < (number_of_lines-(not full))*np:
 			print "Iteration %d [%.6g:%.6g] - %d new offsprings - "%(count,min_value(scores), mean_value(scores),len(k)) + str(k).replace("'","")
@@ -50,7 +54,7 @@ def parseLogFile(filename, np, full, number_of_lines, population_number):
 			if s < scores[i]:
 				k.append((i,"%.4g"%s))
 				scores[i] = s
-				population[i] = map(float, ln[1:])
+				population[i] = map(floatOrNone, ln[1:])
 		print "(*%d)Iteration %d [%.6g, %.6g] - %d new offsprings - "%(len(lines),count,min_value(scores), mean_value(scores),len(k)) + str(k).replace("'","")
 		lines = []
 	elif len(lines):
