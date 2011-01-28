@@ -897,7 +897,36 @@ var AntennaHPattern = function (holder,size, channels, models, sym, model_names,
 	},
 	drawChartBG = function()
 	{
-		var i=0, r=radii,f=r.length-5, cos, sin,a, p = models[0][current],fg="#000",bg="#888",hfg="#888",hbg="#ccc",btn;
+		var i=0, r=radii,f=r.length-5, cos, sin,a, p = models[0][current]
+			,fg="#000",bg="#888",hfg="#888",hbg="#ccc",btn,white="#fff"
+			,normal="normal",bold="bolder"
+			,onBtnOver=function()
+			{
+				var m = this.mno, _t=this; 
+				_t.text.attr({"font-weight":bold});
+				if(shown[m])
+				{
+					_t.attr({fill:hfg});
+				}
+				else
+				{
+					_t.attr({fill:hbg});
+				}
+			}
+			,onBtnOut=function()
+			{
+				var m = this.mno, _t=this; 
+				_t.text.attr({"font-weight":normal});
+				if(shown[m])
+				{
+					_t.attr({fill:colors[m][1]})
+				}
+				else
+				{
+					_t.attr({fill:white})
+				}
+			}
+		;
 		if(models.length>1)
 		{
 			for(i=0;i!=models.length; ++i)
@@ -907,14 +936,17 @@ var AntennaHPattern = function (holder,size, channels, models, sym, model_names,
 				btn.click(showHideModel);
 				btn.mno = i;
 				if(shown[i])btn.attr({fill:colors[i][1]});
-				else btn.attr({fill:"#fff"});
+				else btn.attr({fill:white});
 				btn.text = raphael.text((i+.5)*size/models.length, 8, model_names[i]);
 				btn.text.mno=i;
 				btn.text.click(showHideModel);
-				btn.text.mouseover(function(){this.attr({"font-weight":"bolder"});})
-				btn.text.mouseout(function(){this.attr({"font-weight":"normal"});})
-				btn.mouseover(function(){this.text.attr({"font-weight":"bolder"});})
-				btn.mouseout(function(){this.text.attr({"font-weight":"normal"});})
+				btn.text.btn=btn;
+				btn.text.mouseover(function(){this.btn.onBtnOver();});
+				btn.text.mouseout(function(){this.btn.onBtnOut();});
+				btn.mouseover(onBtnOver);
+				btn.mouseout(onBtnOut);
+				btn.onBtnOver = onBtnOver;
+				btn.onBtnOut = onBtnOut;
 				raphael.text((i+.5)*size/models.length, 18, sym?("F: "+p[0]+"dBi, B: "+p[p.length-1]+"dBi"):("F: "+p[0]+"dBi, B: "+p[Math.round(p.length/2 - .5)]+"dBi"));
 				raphael.text((i+.5)*size/models.length, 28, p.minValue()+" < dBi < "+p.maxValue());
 			}
@@ -1035,7 +1067,7 @@ var configureModelPatternTabs = function()
 			if( _pattern.html()=="Loading...")
 			{
 				ph = _model.html();
-				ph = ph.replace("_r.html", "_p.html");
+				ph = ph.replace("_r.html", "_h.html");
 				_pattern.html(ph);
 			}
 		}else{
@@ -1047,4 +1079,61 @@ var configureModelPatternTabs = function()
 	_show_pattern.click(onTabClick);
 	_show_model.click(onTabClick);
 	_pattern.hide();
+}
+
+var configureTabs = function(list_id)
+{
+	var links = $( list_id +" a" ),
+	    tab_divs = [],
+	    tab_urls = [],
+	    tab_btns = [],
+	    current = -1,
+	selected="selected",
+	ph,
+
+	onTabClick = function()
+	{
+		var i = 0;
+		if($(this).hasClass(selected))return;
+		$(this).toggleClass(selected);
+		if(current!==-1){
+			tab_divs[current].hide();
+			tab_btns[current].toggleClass(selected);
+		}
+		for(;i!=tab_btns.length; ++i)
+		{
+			if(tab_btns[i].hasClass(selected))
+			{
+				current = i;
+				tab_divs[current].show();
+				if(tab_divs[i].html()=="Loading...")
+					tab_divs[i].html(tab_urls[i]);
+			}
+		}
+	};
+
+	links.each(function (index)
+			{
+				var link=$(this),
+					href = link.attr("href"),
+					target_div=link.attr("title");
+				link.removeAttr("href");
+				if(href.charAt(0)=="#")
+				{
+					if(tab_btns.length){$(href).hide()}
+					tab_divs.push($(href));
+				}else{
+					link.attr("title","")
+					tab_divs.push($(title));
+					tab_urls.push("<object data='"+href+"' style='width:100%; height:100%'></object>");
+					$(title).html("Loading...");
+					if(tab_btns.length){$(title).hide()}
+				}
+				tab_btns.push(link);
+				link.click(onTabClick);
+				link.removeClass(selected);
+			});
+	if(tab_btns.length)
+		tab_btns[0].click();
+
 }
