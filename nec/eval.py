@@ -1,7 +1,7 @@
 # Copyright 2010 Nikolay Mladenov, Distributed under 
 # GNU General Public License
 
-import necmath,sys
+import necmath,sys, traceback
 from demathutils import v3add, v3mul, v3sub, v3dot, v3cross, v3len, v3unit, v3rotx, v3roty, v3rotz
 
 output = "output"
@@ -503,6 +503,7 @@ class NecFileObject:
 		for d in self.dependent_vars:
 			try: exec(d, necmath.__dict__, self.globals)
 			except:
+				traceback.print_exc()
 				print "failed parsing '%s'"%(d)
 				raise
 		for li in range(len(self.varlines)):
@@ -578,6 +579,7 @@ class NecFileObject:
 		for d in self.dependent_vars:
 			try: exec(d, necmath.__dict__, self.globals)
 			except:
+				traceback.print_exc()
 				print "failed parsing '%s'"%(d)
 				raise
 		has_comments = 0
@@ -663,10 +665,8 @@ class NecFileObject:
 			try: file.write("\n".join(self.agtLines(nec_input_lines,sweep)))
 			finally: file.close()
 		
-		f, nec_output = tmp.mkstemp(".out", "nec2", os.path.join(".",self.output) ,1)
-		os.close(f)
-		f, exe_input = tmp.mkstemp(".cin", "nec2", os.path.join(".",self.output) ,1)
-		os.close(f)
+		nec_output = nec_input[0:-3]+"out"
+		exe_input = nec_input[0:-3]+"cin"
 		agt = 1.0
 		if self.agt_correction:
 			f = open(exe_input,"wt")
@@ -697,7 +697,12 @@ class NecFileObject:
 		try:
 			r = self.runSweep(nec_input_lines,sweep)
 		except:
-			print sys.exc_info()[1]
+			try:
+				result_lock.acquire()
+				traceback.print_exc()
+			finally:
+				result_lock.release()
+
 			return
 		result_lock.acquire()
 		try: result_map[number]=(r[0],id,r[1])
@@ -756,7 +761,7 @@ class NecFileObject:
 		try:
 			nec_input_lines = self.necInputLines()
 		except:
-			print sys.exc_info()[1]
+			traceback.print_exc()
 			return
 
 		from threading import Lock, Thread
@@ -846,7 +851,7 @@ class OptionParser(optparse.OptionParser):
 		self.add_option("-v", "--vhf-lo", action="append_const", dest="sweeps", const="(54,6,6)", help="adds a vhf-lo (ch. 1-6) sweep")
 		self.add_option("-n", "--num-cores", type="int", default=ncores, help="number of cores to be used, default=%default")
 		self.add_option("-a", "--auto-segmentation", metavar="NUM_SEGMENTS", type="int", default=autosegmentation, help="autosegmentation level - set to 0 to turn autosegmentation off, default=%default")
-		self.add_option("-e", "--engine", metavar="NEC_ENGINE", default="nec2dxs1k5.exe", help="nec engine file name, default=%default")
+		self.add_option("-e", "--engine", metavar="NEC_ENGINE", default="nec2dxs1k5", help="nec engine file name, default=%default")
 		self.add_option("-d", "--min-wire-distance", default=.005, type="float", help="minimum surface-to-surface distance allowed between non-connecting wires, default=%default")
 	def parse_args(self):
 		options, args = optparse.OptionParser.parse_args(self)
@@ -900,6 +905,7 @@ def main():
 			try:
 				run(options)
 			except:
+				traceback.print_exc()
 				pass
 	
 
