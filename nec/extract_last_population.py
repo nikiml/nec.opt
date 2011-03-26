@@ -1,7 +1,7 @@
 from demathutils import mean_value, min_value
 
 def floatOrNone(s):
-	if s== "None":return None
+	if s== "None":return 0
 	return float(s)
 
 def parseLogFile(filename, np, full, number_of_lines, population_number):

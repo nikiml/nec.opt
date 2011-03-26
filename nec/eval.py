@@ -170,6 +170,10 @@ class NecFileObject:
 		self.calc_gain=1
 		try:self.write_js_model = options.js_model
 		except AttributeError: self.write_js_model=0
+		try:
+			self.debug = options.debug
+		except AttributeError:
+			self.debug = 0
 		if self.sourcefile:
 			self.readSource(self.sourcefile)
 			try:
@@ -180,6 +184,7 @@ class NecFileObject:
 				pass
 
 	def readSource(self, sourcefile):
+		if self.debug: sys.stderr.write("debug: Opening file %s\n"%sourcefile)
 		self.sourcefile = sourcefile
 		file = open(sourcefile, "rt")
 		try: self.lines = file.readlines()
@@ -188,6 +193,7 @@ class NecFileObject:
 		self.parse()
 	
 	def parse(self):		
+		if self.debug: sys.stderr.write("debug: Parsing input\n")
 		self.vars = {}
 		self.dependent_vars = []
 		self.varlines=[]
@@ -197,27 +203,36 @@ class NecFileObject:
 			ln = self.lines[i].strip('\n')
 			comment_pos = ln.find("'")
 			if comment_pos!=-1:
-				comment = ln[comment_pos+1:]
-				ln = ln[0:comment_pos].strip(' ')
+				comment = ln[comment_pos+1:].strip()
+				ln = ln[0:comment_pos].strip()
 			else:
 				comment = ""
-				ln = ln.strip(' ')
+				ln = ln.strip()
 			if ln[0:2]== "SY":
+				if self.debug >1: sys.stderr.write("debug: \tParsing line: \"%s\"\n"%ln)
 				try:
 					d = {}
 					exec(ln[3:].strip(), {}, d)
+					if self.debug: 
+						sys.stderr.write("debug: \tAdded independent parameter \"%s\"\n"%d.keys()[0])
+						if self.debug>1: sys.stderr.write("debug: \t\tFull comment = \"%s\"\n"%comment)
 					self.vars.update(d)
 					self.paramlines[d.keys()[0]]=i
 					try:
 						#strip the real comment from the comment
 						comment_pos = comment.find("'")
 						if comment_pos!=-1:
-							comment = comment[0:comment_pos]
-						min, max = eval(comment.strip(' '))
+							comment = comment[0:comment_pos].strip()
+						if self.debug>1: 
+							sys.stderr.write("debug: \t\tLimits comment = \"%s\"\n"%comment)
+						min, max = eval(comment)
 						self.min_max[d.keys()[0]]=(float(min),float(max))
+						if self.debug: sys.stderr.write("debug: \t\tlimits(%.3g, %.3g)\n"%(float(min), float(max)))
 					except:
+						if self.debug>1: sys.stderr.write("debug: \tNo limits found for parameter \"%s\"\n"%d.keys()[0])
 						pass
 				except:
+					if self.debug: sys.stderr.write("debug: \tAdded dependent parameter \"%s\"\n"%ln[3:].strip())
 					self.dependent_vars.append(ln[3:].strip())
 			else:
 				self.varlines.append(ln.replace(',',' ').split())
@@ -293,9 +308,12 @@ class NecFileObject:
 	def evalToken(self, x):
 		return eval(x, necmath.__dict__,self.globals)
 
-	def formatNumber(self, n):
+	def formatNumber(self, n, fixed_width=1):
 		if type(n) == type(.1):
-			return "%.7f"%n
+			if fixed_width:
+				return "%.7f"%n
+			else:
+				return "%.6g"%n
 		else:
 			return str(n)
 	
@@ -501,7 +519,7 @@ class NecFileObject:
 		self.globals={}
 		self.globals.update(self.vars)
 		for d in self.dependent_vars:
-			try: exec(d, necmath.__dict__, self.globals)
+			try: exec d in  necmath.__dict__, self.globals
 			except:
 				traceback.print_exc()
 				print "failed parsing '%s'"%(d)
@@ -529,7 +547,8 @@ class NecFileObject:
 				comments.append(comment)
 				if self.autosegment[0]:
 					self.autoSegment(sline)
-				sline = map(self.formatNumber, sline)
+				fn = lambda x:self.formatNumber(x,0)
+				sline = map(fn, sline)
 				sline.insert(0, ln[0])
 				lines.append(" ".join(sline))
 		del self.globals
@@ -626,6 +645,7 @@ class NecFileObject:
 			else:
 				lines.append("RP 0 1 73 1000 90 0 0 %d"%self.angle_step)
 			lines.append("XQ")
+			lines.append("EN")
 		else:
 			lines.append("PQ -1")
 			lines.append("PT -1")
@@ -644,6 +664,7 @@ class NecFileObject:
 		lines.append("FR 0 0 0 0 %g 0"%(sweep[0]+(sweep[2]-1)*.5*sweep[1]))
 		lines.append("RP 0 37 73 1001 -180 0 5 5")
 		lines.append("XQ")
+		lines.append("EN")
 		return lines
 	
 	def runSweep(self, nec_input_lines, sweep):
@@ -853,6 +874,7 @@ class OptionParser(optparse.OptionParser):
 		self.add_option("-a", "--auto-segmentation", metavar="NUM_SEGMENTS", type="int", default=autosegmentation, help="autosegmentation level - set to 0 to turn autosegmentation off, default=%default")
 		self.add_option("-e", "--engine", metavar="NEC_ENGINE", default="nec2dxs1k5", help="nec engine file name, default=%default")
 		self.add_option("-d", "--min-wire-distance", default=.005, type="float", help="minimum surface-to-surface distance allowed between non-connecting wires, default=%default")
+		self.add_option("--debug", default=0, type="int", help="turn on some loging")
 	def parse_args(self):
 		options, args = optparse.OptionParser.parse_args(self)
 		if options.input == "":
