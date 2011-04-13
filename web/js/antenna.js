@@ -774,7 +774,7 @@ var AntennaHPattern = function (holder,size, channels, models, sym, model_names,
 		ratio = Math.round(maxmax/ratio-.5);
 		while(maxmax >=ratio)
 		{
-			c.push(maxmax);
+			circles.push(maxmax);
 			maxmax-=ratio;
 		}
 		circles.push(0);
