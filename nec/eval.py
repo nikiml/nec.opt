@@ -18,6 +18,8 @@ class FrequencyData:
 		self.gain = 0
 		self.char_imp = char_imp
 		self.angle = 0
+		self.horizontal = {}
+		self.vertical = {}
 
 	def swr(self):
 		rc = necmath.sqrt( \
@@ -36,9 +38,22 @@ class FrequencyData:
 			g = self.gain
 		tmp = 4*max(self.real,.0001)*self.char_imp/(necmath.pow(self.real+self.char_imp,2)+necmath.pow(self.imag,2))
 		return g+10*necmath.log10(tmp)
+
+	def horizontalNet(self, phi):
+		return self.net(self.horizontal[phi])
+
+	def verticalNet(self, theta):
+		return self.net(self.vertical[theta])
 		
 	def __str__(self):
 		return "%d Mhz - raw(%f), net(%f), swr(%f), real(%f), imag(%f)"%(int(self.freq), self.gain, self.net(), self.swr(), self.real, self.imag)
+
+	def forwardGain(self):
+		return self.horizontalNet(0)
+
+	def backwardGain(self):
+		angles = self.horizontal.keys()
+		return self.horizontalNet(angles[len(angles)/2])
 
 
 class NecOutputParser:
@@ -48,8 +63,6 @@ class NecOutputParser:
 		self.frequency_angle_data=frequency_angle_data
 		self.angle_step = angle_step
 		self.agt = 10*necmath.log10(agt)
-		self.horizontal_pattern = {}
-		self.vertical_pattern = {}
 		self.omni = omni
 		if output:
 			self.parse(output)
@@ -81,7 +94,19 @@ class NecOutputParser:
 		for i in self.frequencies:
 			res.append((int(i.freq), i.net(),i.swr()))
 		return res
+	def horizontalPattern(self):
+		res = {}
+		for f in self.frequencies:
+			res[f.freq] = [f.horizontalNet(phi) for phi in f.horizontal.keys()]
+		
+		return res
 
+	def verticalPattern(self):
+		res = {}
+		for f in self.frequencies:
+			res[f.freq] = [f.verticalNet(theta) for theta in f.vertical.keys()]
+		
+		return res
 
 	def parse(self, output):
 		file = open(output, "rt")
@@ -113,33 +138,28 @@ class NecOutputParser:
 #				freq = self.frequencies[-1].freq
 				if freq in self.frequency_angle_data.keys():
 					angle = self.frequency_angle_data[freq][0]
+				fd = FrequencyData(self.char_imp)
+				fd.real = real
+				fd.imag = imag
+				fd.freq = freq
 				while len(lines[i].strip()):
 					ln = lines[i]
 					if ln[0]=="*" or len(ln) < 8 :break
 					try:
-						fd = FrequencyData(self.char_imp)
-						fd.real = real
-						fd.imag = imag
-						fd.freq = freq
-
 						theta = float(ln[0:8])
 						phi = float(ln[8:17])
 						gain = float(ln[28:36])-self.agt
 						if theta==90 :
-							if not freq in self.horizontal_pattern:
-								self.horizontal_pattern[freq]=[]
-							self.horizontal_pattern[freq].append(fd.net(gain))
+							fd.horizontal[phi]=gain
 						if phi == 0:
-							if not freq in self.vertical_pattern:
-								self.vertical_pattern[freq]=[]
-							self.vertical_pattern[freq].append(fd.net(gain))
-						if theta==90 and (abs(phi-angle)<=self.angle_step*.5 or self.omni):
+							fd.vertical[theta]=gain
+						if theta==90 and (abs(phi-angle)<=self.angle_step*.5):
 							fd.gain = gain
 							fd.angle = angle
-							self.frequencies.append(fd)
 						i = i+1
 					except:
 						break
+				self.frequencies.append(fd)
 			i = i+1
 		if self.frequency_angle_data:
 			freqs = []
@@ -825,15 +845,15 @@ class NecFileObject:
 	
 			for r in range(len(results)):
 				nop = NOP(results[r][0], results[r][2], char_impedance, self.angle_step, frequency_data)
-				h.update(nop.horizontal_pattern)
-				v.update(nop.vertical_pattern)
+				h.update(nop.horizontalPattern())
+				v.update(nop.verticalPattern())
 				nop.printFreqs(r==0)
 		else:
 			res = [];
 			for r in range(len(results)):
 				nop = NOP(results[r][0], results[r][2], char_impedance, self.angle_step, frequency_data)
-				h.update(nop.horizontal_pattern)
-				v.update(nop.vertical_pattern)
+				h.update(nop.horizontalPattern())
+				v.update(nop.verticalPattern())
 				res = res+nop.getGainSWRChartData()
 			res.sort()
 			g = self.sourcefile+"_gain"

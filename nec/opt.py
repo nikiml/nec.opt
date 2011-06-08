@@ -3,7 +3,7 @@
 
 
 import differential_evolution as DE
-import os, math,sys
+import os, math,sys,traceback
 from nec import eval as ne
 
 class NecFileEvaluator:
@@ -122,7 +122,7 @@ class NecFileEvaluator:
 				range_scores.append( "R%dms"%i)
 				range_scores.append( "R%das"%i)
 
-			self.log.write(self.nec_file.formatName("Score")+"\t"+"\t".join(map(self.nec_file.formatName, self.opt_vars))+"\t"+"\t".join(map(self.nec_file.formatName, range_scores))+"\n")
+			self.log.write(self.nec_file.formatName("Score")+"\t"+"\t".join(map(self.nec_file.formatName, sorted(self.opt_vars)))+"\t"+"\t".join(map(self.nec_file.formatName, range_scores))+"\n")
 			self.log.flush()
 
 	def __del__(self):
@@ -303,17 +303,22 @@ class NecFileEvaluator:
 				res = eval(self.target_function, d)
 	
 			except:
+				print traceback.print_tb(sys.exc_info()[2])
 				print sys.exc_info()[1]
 				res = -1000
 		if res == -1000:
 			res = 1000.0
-			
-		print "\t".join(map(self.nec_file.formatName, self.opt_vars))
-		print "\t".join(map(self.nec_file.formatNumber, vector))
+		
+		z = sorted(zip(self.opt_vars,vector))
+		sorted_vars = [x[0] for x in z]
+		sorted_vect = [x[1] for x in z]
+
+		print "\t".join(map(self.nec_file.formatName, sorted_vars))
+		print "\t".join(map(self.nec_file.formatNumber, sorted_vect))
 		print res
 		print "\n"
 		if self.log:
-			self.logParamVector(vector,res, range_results)
+			self.logParamVector(sorted_vect,res, range_results)
 			self.log.flush()
 #			self.log.write(self.nec_file.formatNumber(res)+"\t"+"\t".join(map(self.nec_file.formatNumber, vector))+"\n")
 
