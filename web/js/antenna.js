@@ -1046,6 +1046,14 @@ function uhfFreqTitles()
 	return res;
 }
 
+function uhfHiFreqTitles()
+{
+	var i=0, res=[];
+	for(; i!=57; ++i)
+		res.push( (470+i*6)+" Mhz");
+	return res;
+}
+
 var configureModelPatternTabs = function()
 {
 	var _show_pattern = $("#show_pattern"),
