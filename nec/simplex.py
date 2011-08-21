@@ -5,7 +5,7 @@ def wrap_function(function):
     ncalls = [0]
     def function_wrapper(x):
         ncalls[0] += 1
-        return function(x)
+        return float(function(x))
     return ncalls, function_wrapper
 
 

@@ -52,7 +52,7 @@ class FrequencyData:
 		return self.horizontalNet(0)
 
 	def backwardGain(self):
-		angles = self.horizontal.keys()
+		angles = sorted(elf.horizontal.keys())
 		return self.horizontalNet(angles[len(angles)/2])
 
 
@@ -88,7 +88,7 @@ class NecOutputParser:
 					print "%6.4g - invalid result"%i.freq
 				else:
 					target = self.frequency_angle_data[i.freq][1]
-					print "%6.4g %6.2g %6.2g % 7.5g % 7.5g %7.5g %7.5g % 7.5g % 7.5g"%(int(i.freq), target, i.angle, i.gain, i.net(),i.swr(), i.real, i.imag, target-i.net())
+					print "%6.4g %6.2g %6.3g % 7.5g % 7.5g %7.5g %7.5g % 7.5g % 7.5g"%(int(i.freq), target, i.angle, i.gain, i.net(),i.swr(), i.real, i.imag, target-i.net())
 	def getGainSWRChartData(self):
 		res = []
 		for i in self.frequencies:
@@ -97,14 +97,14 @@ class NecOutputParser:
 	def horizontalPattern(self):
 		res = {}
 		for f in self.frequencies:
-			res[f.freq] = [f.horizontalNet(phi) for phi in f.horizontal.keys()]
+			res[f.freq] = [f.horizontalNet(phi) for phi in sorted(f.horizontal.keys())]
 		
 		return res
 
 	def verticalPattern(self):
 		res = {}
 		for f in self.frequencies:
-			res[f.freq] = [f.verticalNet(theta) for theta in f.vertical.keys()]
+			res[f.freq] = [f.verticalNet(theta) for theta in sorted(f.vertical.keys())]
 		
 		return res
 
@@ -149,11 +149,11 @@ class NecOutputParser:
 						theta = float(ln[0:8])
 						phi = float(ln[8:17])
 						gain = float(ln[28:36])-self.agt
-						if theta==90 :
+						if abs(theta)==90 :
 							fd.horizontal[phi]=gain
 						if phi == 0:
 							fd.vertical[theta]=gain
-						if theta==90 and (abs(phi-angle)<=self.angle_step*.5):
+						if theta==90 and (abs(phi-angle)<=self.angle_step*.5) or theta==-90 and (abs(phi-180-angle)<=self.angle_step*.5):
 							fd.gain = gain
 							fd.angle = angle
 						i = i+1
@@ -264,7 +264,7 @@ class NecFileObject:
 				elif ln[0:2] == "GS":
 					self.scale = float(self.varlines[-1][3])
 				elif ln[0:2] == "RP":
-					self.angle_Step = float(self.varlines[-1][8])
+					self.angle_step = float(self.varlines[-1][8])
 
 		for i in self.vars.keys():
 			self.vars[i]=float(self.vars[i])
@@ -552,15 +552,31 @@ class NecFileObject:
 				if ln[0].strip() not in skiptags:
 					lines.append(" ".join(ln))
 				if ln[0].strip() == "GX":
-					self.mirrorStructure(math_lines,comments, int(ln[1]), int(ln[2][0]), int(ln[2][1]), int(ln[2][2]))
+					i1 = int(self.evalToken(ln[1]))
+					self.mirrorStructure(math_lines,comments, i1, int(ln[2][0]), int(ln[2][1]), int(ln[2][2]))
+					if not "GX" in skiptags:
+						lines[-1]="GX %d %s"%(i1,ln[2])
 				elif ln[0].strip() == "GM":
 					if len(ln) < 9:
 						ln=ln+(9-len(ln))*[.0]
-					self.moveCopyStructure(math_lines,comments, int(ln[1]), int(ln[2]), self.evalToken(ln[3]), self.evalToken(ln[4]), self.evalToken(ln[5]),self.evalToken(ln[6]), self.evalToken(ln[7]), self.evalToken(ln[8]), int(float(ln[9])))
+					i1 = int(self.evalToken(ln[1]))
+					i2 = int(self.evalToken(ln[2]))
+					f3 = self.evalToken(ln[3])
+					f4 = self.evalToken(ln[4])
+					f5 = self.evalToken(ln[5])
+					f6 = self.evalToken(ln[6])
+					f7 = self.evalToken(ln[7])
+					f8 = self.evalToken(ln[8])
+					i9 = int(self.evalToken(ln[9]))
+					self.moveCopyStructure(math_lines,comments, i1, i2, f3, f4, f5, f6, f7, f8, i9)
 					if not "GM" in skiptags:
-						lines[-1]="GM %d %d %f %f %f %f %f %f %d"%tuple(map(int,ln[1:3])+map(self.evalToken,ln[3:9])+[int(float(ln[9]))])
+						lines[-1]="GM %d %d %f %f %f %f %f %f %d"%(i1, i2, f3, f4, f5, f6, f7, f8, i9)
 				elif ln[0].strip() == "GR":
-					self.rotateStructure(math_lines,comments, int(ln[1]), int(ln[2]))
+					i1 = int(self.evalToken(ln[1]))
+					i2 = int(self.evalToken(ln[2]))
+					self.rotateStructure(math_lines,comments, i1, i2)
+					if not "GR" in skiptags:
+						lines[-1]="GR %d %d"%(i1, i2)
 			else:
 				sline = map( self.evalToken , ln[1:])
 				math_lines.append(list(sline))
@@ -654,18 +670,35 @@ class NecFileObject:
 					file.write("CE\n")
 			file.write("\n".join(lines)+"\n")
 		finally: file.close()
-	def freqSweepLines(self, nec_input_lines, sweep):
+	def freqSweepLines(self, nec_input_lines, sweep, frequency_data):
 		lines = list(nec_input_lines)
 		#lines.append("FR 0 1 0 0 %g 0"%sweep[0])
 		#lines.append("XQ")
 		lines.append("FR 0 %d 0 0 %g %g"%(sweep[2],sweep[0],sweep[1]))
 		if self.calc_gain:
-			if self.forward: 
-				lines.append("RP 0 1 1 1000 90 0 0 0")
+			if frequency_data:
+				del lines[-1]
+				in_sweep = 0
+				for freq in sorted(frequency_data.keys()):
+					if freq>=sweep[0] and freq<=sweep[0]+sweep[1]*sweep[2]:
+						if not in_sweep:
+							lines.append("EK")
+							lines.append("FR 0 1 0 0 %g 0"%freq)
+							lines.append("XQ")
+						in_sweep=1
+						lines.append("FR 0 1 0 0 %g 0"%freq)
+						lines.append("RP 0 1 1 1000 90 %g 0 0"%frequency_data[freq][0])
+				if not in_sweep: 
+					return []
+				lines.append("XQ")
+				return lines
 			else:
-				lines.append("RP 0 1 73 1000 90 0 0 %d"%self.angle_step)
-			lines.append("XQ")
-			lines.append("EN")
+				if self.forward: 
+					lines.append("RP 0 1 1 1000 90 0 0 0")
+				else:
+					lines.append("RP 0 1 73 1000 90 0 0 %d"%self.angle_step)
+				lines.append("XQ")
+				lines.append("EN")
 		else:
 			lines.append("PQ -1")
 			lines.append("PT -1")
@@ -687,7 +720,7 @@ class NecFileObject:
 		lines.append("EN")
 		return lines
 	
-	def runSweep(self, nec_input_lines, sweep):
+	def runSweep(self, nec_input_lines, sweep, frequency_data, get_agt_scores=0, use_agt = None):
 		import tempfile as tmp
 		import subprocess as sp
 		import os
@@ -699,9 +732,12 @@ class NecFileObject:
 		agt_input = nec_input[0:-3]+"agt"
 
 		file = open(nec_input, "wt")
-		try: file.write("\n".join(self.freqSweepLines(nec_input_lines,sweep)))
+		fslines = self.freqSweepLines(nec_input_lines,sweep, frequency_data)
+		if not fslines:
+			return ()
+		try: file.write("\n".join(fslines))
 		finally: file.close()
-		if self.agt_correction:
+		if (self.agt_correction or get_agt_scores) and (use_agt is None):
 			file = open(agt_input, "wt")
 			try: file.write("\n".join(self.agtLines(nec_input_lines,sweep)))
 			finally: file.close()
@@ -709,7 +745,9 @@ class NecFileObject:
 		nec_output = nec_input[0:-3]+"out"
 		exe_input = nec_input[0:-3]+"cin"
 		agt = 1.0
-		if self.agt_correction:
+		if use_agt is not None:
+			agt = use_agt
+		elif self.agt_correction or get_agt_scores :
 			f = open(exe_input,"wt")
 			f.write(agt_input)
 			f.write("\n")
@@ -721,6 +759,8 @@ class NecFileObject:
 			popen.wait()
 			f.close()
 			agt = self.parseAgt(nec_output)
+			if get_agt_scores:
+				return (nec_output,agt)
 			#print "sweep (%g,%d,%g) - AGT=%g (%g)"%(sweep[0],sweep[1],sweep[2],agt,10*math.log10(agt))
 		f = open(exe_input,"wt")
 		f.write(nec_input)
@@ -734,9 +774,12 @@ class NecFileObject:
 		f.close()
 		return (nec_output,agt)
 		
-	def runSweepT(self, nec_input_lines, sweep, number, result_map, result_lock, id ):
+	def runSweepT(self, nec_input_lines, sweep, frequency_data, number, result_map, result_lock, id, get_agt_scores=0, use_agt = None ):
 		try:
-			r = self.runSweep(nec_input_lines,sweep)
+			ua = None
+			if use_agt and number in use_agt:
+				ua = use_agt[number]
+			r = self.runSweep(nec_input_lines,sweep, frequency_data,get_agt_scores,ua)
 		except:
 			try:
 				result_lock.acquire()
@@ -746,10 +789,11 @@ class NecFileObject:
 
 			return
 		result_lock.acquire()
-		try: result_map[number]=(r[0],id,r[1])
+		try: 
+			if r : result_map[number]=(r[0],id,r[1], number)
 		finally: result_lock.release()
 
-	def runSweeps(self, sweeps, num_cores=1, cleanup=0):
+	def runSweeps(self, sweeps, frequency_data, num_cores=1, cleanup=0, get_agt_scores = 0, use_agt = None):
 		if cleanup:
 			import os, time, stat
 			try:
@@ -817,7 +861,7 @@ class NecFileObject:
 				s = [sweep[0]+j*fps*sweep[1],sweep[1],fps]
 				if j==ncores-1:
 					s = [sweep[0]+j*fps*sweep[1],sweep[1],sweep[2]-j*fps]
-				threads.append(Thread(target=self.runSweepT, args=(nec_input_lines, s, number,results, result_lock,i )))
+				threads.append(Thread(target=self.runSweepT, args=(nec_input_lines, s, frequency_data, number,results, result_lock,i,get_agt_scores,use_agt )))
 				threads[-1].start()
 				number = number+1
 
@@ -825,13 +869,13 @@ class NecFileObject:
 			t.join()
 
 		r = []
-		for i in xrange(len(results)):
+		for i in results.keys():
 			r.append(results[i])
 		return r
 
 	def evaluate(self, sweeps, char_impedance, num_cores=1, cleanup=0, frequency_data = {}, chart_like=0):
 		NOP = NecOutputParser 
-		results = self.runSweeps(sorted(sweeps), num_cores, cleanup) #[[174,6,8],[470,6,40]]
+		results = self.runSweeps(sorted(sweeps), frequency_data, num_cores, cleanup) #[[174,6,8],[470,6,40]]
 		h={}
 		v={}
 		if not chart_like:

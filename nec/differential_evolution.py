@@ -139,13 +139,13 @@ data members:
 
     self.scores = self.population_size*[1000.0]
     self.optimize()
-    self.best_score = min_value( self.scores )
+    self.best_score = float(min_value( self.scores ))
     self.best_vector = self.population[ min_index( self.scores ) ]
     self.evaluator.x = self.best_vector
     if self.show_progress:
       self.evaluator.print_status(
             min_value(self.scores),
-            mean_value(self.scores),
+            mean_value(map(float,self.scores)),
             self.population[ min_index( self.scores ) ],
             'Final')
 
@@ -154,7 +154,7 @@ data members:
     # initialise the population please
     self.make_random_population()
     converged = False
-    monitor_score = mean_value( self.scores )
+    monitor_score = mean_value( map(float,self.scores ))
     count = 0
     while not converged:
       self.evolve()
@@ -166,18 +166,18 @@ data members:
           # the function signature should be (min_target, mean_target, best vector)
           self.evaluator.print_status(
             min_value(self.scores),
-            mean_value(self.scores),
+            mean_value(map(float,self.scores)),
             self.population[ min_index( self.scores ) ],
             count)
 
       count += 1
       if count%self.monitor_cycle==0:
-        if (monitor_score-mean_value(self.scores) ) < self.eps:
+        if (monitor_score-mean_value(map(float,self.scores)) ) < self.eps:
           converged = True
         else:
-         monitor_score = mean_value(self.scores)
-      rd = (mean_value(self.scores) - min_value(self.scores) )
-      rd = rd*rd/(min_value(self.scores)*min_value(self.scores) + self.eps*self.eps )
+         monitor_score = mean_value(map(float,self.scores))
+      rd = (mean_value(map(float,self.scores)) - float(min_value(self.scores)) )
+      rd = rd*rd/(float(min_value(self.scores))*float(min_value(self.scores)) + self.eps*self.eps )
       if ( rd < self.eps*self.eps ):
         print "converged by mean to min score difference rd=%g"%rd
         converged = True
@@ -190,9 +190,8 @@ data members:
     self.population,self.scores = self.evaluator.initialPopulation()
     if self.population:
 	    self.population_size = len(self.population)
-	    if not self.scores:
-		    self.scores = self.population_size*[1000.0]
-		    self.score_population()
+	    self.scores = self.population_size*[1000.0]
+	    self.score_population()
 	    return
     for ii in xrange(self.population_size):
       self.population.append( self.vector_length*[0.0] )
@@ -252,9 +251,10 @@ data members:
           if (rnd[jj]>self.cr):
             test_vector[ permut[jj] ] = vi[ permut[jj] ]
       # get the score please
-      test_score = self.evaluator.target( test_vector )
+      test_score = self.evaluator.testMemberAgainstScore(test_vector, self.scores[ii])
+      #self.evaluator.target( test_vector )
       # check if the score if lower
-      if test_score < self.scores[ii] :
+      if test_score is not None:
         self.scores[ii] = test_score
         new_population[ii] = test_vector
     for ii in xrange(self.population_size):
@@ -265,10 +265,10 @@ data members:
       res = self.plugin.postEvolve(self)
       if res:
         for r in res:
-          print "Plugin improved member %d from %g to %g"%(r[0], self.scores[r[0]], r[2])
+          print "Plugin improved member %d from %g to %g"%(r[0], float(self.scores[r[0]]), r[2])
           self.population[r[0]] = r[1]
           self.scores[r[0]] = r[2]
-    self.best_score = min_value( self.scores )
+    self.best_score = float(min_value( self.scores ))
     self.best_vector = self.population[ min_index( self.scores ) ]
     self.evaluator.x = self.best_vector
 
@@ -301,9 +301,9 @@ class DESQIPlugin:
       x1 = de.population[i1]
       x2 = de.population[i2]
       x3 = de.population[i3]
-      f1 = de.scores[i1]
-      f2 = de.scores[i2]
-      f3 = de.scores[i3]
+      f1 = float(de.scores[i1])
+      f2 = float(de.scores[i2])
+      f3 = float(de.scores[i3])
       for i in xrange(de.vector_length):
         test_vector[i] = .5*( (x1[i]*x1[i]-x2[i]*x2[i])*f3 + (x2[i]*x2[i] - x3[i]*x3[i])*f1 + (x3[i]*x3[i] - x1[i]*x1[i])*f2) / ( (x1[i]-x2[i])*f1 + (x2[i] - x3[i])*f1 + (x3[i] - x1[i])*f2)
       test_score = de.evaluator.target( test_vector )

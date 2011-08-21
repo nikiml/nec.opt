@@ -26,3 +26,10 @@ def atan2(y,x) : return degrees(_atan2(y,x))
 
 atn = atan
 def sqr(a) : return a*a
+
+def normalizeDegree(ang, start = 0):
+	while ang < start:
+		ang += 360
+	end = start+360
+	while ang >= end:
+		end -=360

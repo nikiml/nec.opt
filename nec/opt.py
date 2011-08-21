@@ -71,6 +71,10 @@ class NecFileEvaluator:
 		self.swr_target = options.swr_target
 		self.opt_vars = []
 		self.tanh_domain = []
+		try:
+			self.debug = options.debug
+		except AttributeError:
+			self.debug = 0
 		for k in self.nec_file.min_max.keys():
 			if not self.parameters or k in self.parameters:
 				self.opt_vars.append(k)
@@ -106,6 +110,11 @@ class NecFileEvaluator:
 		self.comments.append("SWR target: %g"%self.swr_target)
 		self.comments.append("Target function: %s"%self.target_function)
 		self.comments.append("")
+		self.agt_score_threshold = .0
+		self.agt_score_threshold_stat1 = .0
+		self.agt_score_threshold_stat_count1 = 0
+		self.agt_score_threshold_stat2 = .0
+		self.agt_score_threshold_stat_count2 = 0
 			
 
 		if options.log_file:
@@ -217,7 +226,67 @@ class NecFileEvaluator:
 		self.log.write(self.nec_file.formatNumber(score)+"\t"+"\t".join(map(self.nec_file.formatNumber, vector))+range_scores+"\n")
 		self.log.flush()
 
+	class Score:
+		def __init__(self, score, agt_score):
+			self.scores = (score, agt_score)
+		def __lt__(self, other):
+			return self.scores[0] < other.scores[0]
+		def __gt__(self, other):
+			return self.scores[0] > other.scores[0]
+		def __float__(self):
+			return self.scores[0]
+
+	def testMemberAgainstScore(self, vector, score):
+		if self.frequency_data:
+			s = self.target_(vector,0,None)
+			if s < float(score):
+				return NecFileEvaluator.Score(s,s)
+			return None
+		if self.agt_score_threshold == .0:
+			self.agt_score_threshold = max(self.agt_score_threshold_stat1,self.agt_score_threshold_stat2 )*1.1
+			if self.debug: sys.stderr.write("debug: agt threshold = %.6g\n"%self.agt_score_threshold)
+			self.agt_score_threshold_stat_count1 = 0
+			self.agt_score_threshold_stat_count2 = 0
+			self.agt_score_threshold_stat1 = 0
+			self.agt_score_threshold_stat2 = 0
+		s, agts = self.target_(vector, 1,None)
+		if self.debug: sys.stderr.write("debug: agt score = %g\n"%s)
+		if self.debug: sys.stderr.write("debug: agts = "+str(agts)+"\n")
+		if self.debug: sys.stderr.write("debug: prev agt score = %g\n"%score.scores[1])
+		if s > score.scores[1]+self.agt_score_threshold:
+			if self.debug: sys.stderr.write("debug: Discarding(%d, %d, %.6g, %.6g)\n"%(self.agt_score_threshold_stat_count1, self.agt_score_threshold_stat_count2,self.agt_score_threshold_stat1,self.agt_score_threshold_stat2 ))
+			self.printLog(vector, float(score)+1, None)
+			return None
+		sc = self.target_(vector, 0, agts)
+		self.agt_score_threshold_stat_count2+=1
+		self.agt_score_threshold_stat2=max(self.agt_score_threshold_stat2,s - score.scores[1] - sc + score.scores[0])
+		if self.debug: sys.stderr.write("debug: real score = %g\n"%sc)
+		if self.debug: sys.stderr.write("debug: prev  score = %g\n"%float(score))
+		if sc < float(score): 
+			self.agt_score_threshold_stat_count1+=1
+			self.agt_score_threshold_stat1=max(self.agt_score_threshold_stat1,s - score.scores[1])
+			if self.agt_score_threshold_stat_count1 > 20 and self.agt_score_threshold_stat_count2 > 100:
+				self.agt_score_threshold_stat_count1 = 0
+				self.agt_score_threshold_stat_count2 = 0
+				self.agt_score_threshold = min(1, (max(self.agt_score_threshold_stat1,self.agt_score_threshold_stat2 ))*1.1)
+				self.agt_score_threshold_stat1 = 0
+				self.agt_score_threshold_stat2 = 0
+				print "new agt threshold = %.6g"%self.agt_score_threshold
+
+			return NecFileEvaluator.Score(sc,s)
+		if self.debug: sys.stderr.write("debug: Discarding(%d, %d, %.6g, %.6g)\n"%(self.agt_score_threshold_stat_count1, self.agt_score_threshold_stat_count2,self.agt_score_threshold_stat1,self.agt_score_threshold_stat2 ))
 	def target(self, vector):
+		s, agts = self.target_(vector, 1,None)
+		if self.debug: sys.stderr.write("debug: agt score = %g\n"%s)
+		if self.debug: sys.stderr.write("debug: agts = "+str(agts)+"\n")
+		sc = self.target_(vector, 0, agts)
+		if self.debug: sys.stderr.write("debug: real score = %g\n"%sc)
+		if self.agt_score_threshold == .0:
+			self.agt_score_threshold_stat2=max(self.agt_score_threshold_stat2, sc - s)
+			if self.debug: sys.stderr.write("debug: expected agt threshold = %.6g\n"%self.agt_score_threshold_stat2)
+		return NecFileEvaluator.Score(sc,s)
+
+	def target_(self, vector, get_agt_score, use_agt ):
 		class RangeResult:
 			def __init__(self):
 				self.max_gain_diff = None
@@ -243,8 +312,9 @@ class NecFileEvaluator:
 			var = self.opt_vars[i]
 			self.nec_file.vars[var]=vector[i]
 
-		results = self.nec_file.runSweeps(self.ranges, self.ncores, cleanup=1)
+		results = self.nec_file.runSweeps(self.ranges,self.frequency_data, self.ncores, 1,get_agt_score, use_agt)
 		res = -1000
+		agts = {}
 		if not results:
 			print "writing erroneous file..."
 			try:
@@ -253,6 +323,7 @@ class NecFileEvaluator:
 			except:
 				print "failed"
 		else:
+			#agts = [1.0]*len(results)
 
 			NOP = ne.NecOutputParser
 			try:
@@ -260,6 +331,7 @@ class NecFileEvaluator:
 					nop = NOP(r[0], r[2], self.char_impedance, self.nec_file.angle_step, self.frequency_data,self.omni)
 					#print "output parsed"
 					sweepid = r[1]
+					agts[r[3]] = r[2]
 					for freq in nop.frequencies:
 						freqid = self.freqID(freq.freq, sweepid)
 						if self.frequency_data:
@@ -268,8 +340,9 @@ class NecFileEvaluator:
 							tl = self.targetLevel(freqid[0], freqid[1])
 						gain_diff = tl-freq.net()
 						swr_diff = (freq.swr() - self.swr_target)
-						#print "freq %g, target level %g, freqno %d, gaindiff %g, swrdiff %g"%(freq.freq, tl, freqid[0], gain_diff, swr_diff)
+						#print "freq %g, target level %g, net %g, freqno %d, gaindiff %g, swrdiff %g"%(freq.freq, tl, freq.net(),freqid[0], gain_diff, swr_diff)
 						range_results[freqid[0]].add(gain_diff, swr_diff)
+				import pprint
 				d = {}
 				d["max_gain_diff"] = -1000.0
 				d["ave_max_gain_diff"] = 0.0
@@ -281,6 +354,8 @@ class NecFileEvaluator:
 				d["ave_swr_diff"] = 0.0
 				freq_count=0
 				for i in range_results:
+					if not i.count: continue
+					#pprint.pprint(i.__dict__)
 					if i.max_gain_diff > d["max_gain_diff"]:
 						d["max_gain_diff"] = i.max_gain_diff
 					if d["max_ave_gain_diff"] < i.gain_diff_sum/i.count:
@@ -299,7 +374,7 @@ class NecFileEvaluator:
 				d["ave_max_swr_diff"] = d["ave_max_swr_diff"]/len(self.ranges)
 				d["ave_max_gain_diff"] = d["ave_max_gain_diff"]/len(self.ranges)
 	
-				#print d
+				#pprint.pprint(d)
 				res = eval(self.target_function, d)
 	
 			except:
@@ -308,7 +383,13 @@ class NecFileEvaluator:
 				res = -1000
 		if res == -1000:
 			res = 1000.0
-		
+
+		if get_agt_score:
+			return (res,agts)
+		self.printLog(vector, res,range_results)
+		return res
+
+	def printLog(self, vector, res,range_results):
 		z = sorted(zip(self.opt_vars,vector))
 		sorted_vars = [x[0] for x in z]
 		sorted_vect = [x[1] for x in z]
@@ -331,8 +412,6 @@ class NecFileEvaluator:
 				fn = fn+".nec"
 				self.nec_file.writeParametrized(fn, comments = self.comments+["Score %g"%res,""])
 
-		return res
-
 	def print_status(self, minv, meanv, vector, count):
 		vector = self.tanhTransform(vector)
 		print "====================================================================="
@@ -345,7 +424,7 @@ def optionsParser():
 	class MainOptionParser(ne.OptionParser):
 		def __init__(self):
 			ne.OptionParser.__init__(self)
-			self.add_option("--agt-correction", default="0", type="int", help="set to 1 to enable agt correction. It is slower but more accurate.")
+			self.add_option("--agt-correction", default="1", type="int", help="This one is now ingorred. Always set to 1 to enable agt correction.")
 			self.add_option("-l", "--log-file", default="opt.log",metavar="FILE", help="log file. The default is %default.")
 			self.add_option("-S", "--seed-with-input", default=False, action="store_true", help="use the input file as one of the population members")
 			self.add_option("-t", "--target_level", dest="target_levels" ,metavar="TARGET_LEVEL", action="append", type="string", help="appends target level(s) for a sweep, the number of target levels must match the number of sweeps and they are paired positionally. Examples1: -s (174,6,8) -t (8,9) means target levels linearly increasing from 8 to 9 for the frequencies from 174 to 216. Example2: -s (174,6,8) -t (8, 8.5, 9.5, 9) means target levels of 8 for 174, 9 for 216 and gradually increasing levels from 8.5 to 9.5 for the range 180 to 210")
@@ -360,8 +439,8 @@ def optionsParser():
 			self.add_option( "--de-f", default = 0.6, type="float", help="The DE's differential parameter. Should be >.5, the default is %default")
 			self.add_option( "--de-cr", default = 0.9, type="float", help = "The DE's crossover parameter. Should be > .8, the default is %default")
 			self.add_option( "--de-np", default = 50, type="int", help="The DE's population size parameter. The literature recommends to use 10*(optimization_parameters). The defaults is %default")
-			self.add_option("-P", "--output_population", default = False, action="store_true", help="output the full population in the log file after every iteration.")
-			self.add_option("-f", "--frequency_data", default = "{}", help="a map of frequency to (angle, expected_gain) tuple" )
+			self.add_option("-P", "--output-population", default = False, action="store_true", help="output the full population in the log file after every iteration.")
+			self.add_option("-f", "--frequency-data", default = "{}", help="a map of frequency to (angle, expected_gain) tuple" )
 			self.add_option("-b", "--output-best", default = -1, help="set to 0 or 1 to output the best score nec file as 'best.nec'. Default is -1 (output if not in local search)." )
 			self.add_option("-p", "--parameters", default = "", help="If not empty restrict the list of optimization parameters to this list." )
 			self.add_option("-r", "--restart", default = "", metavar="RESTART_FILE", help="restart from population saved in a file." )
@@ -389,7 +468,7 @@ def optionsParser():
 			print options.target_levels
 			print "SWR target level set to: %g:"% options.swr_target
 			print "Target function set to \"%s\"" % options.target_function
-			print "use-agt-correction set to %d"%options.agt_correction
+			print "use-agt-correction set to 1"
 			options.forward = not options.frequency_data and not options.omni
 
 
@@ -400,6 +479,7 @@ def optionsParser():
 
 def main():
 	options, args = optionsParser().parse_args()
+	options.agt_correction = 1
 	evaluator = NecFileEvaluator(options)
 	ins_sol_vec = None
 	if options.seed_with_input:
