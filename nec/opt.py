@@ -58,17 +58,19 @@ class NecFileEvaluator:
 		self.target_function = options.target_function
 		self.char_impedance = options.char_impedance
 		self.nec_file = ne.NecFileObject(options)
-		self.nec_file.calc_gain = (self.target_function.find("gain")!=-1)
+		self.nec_file.calc_gain = (self.target_function.find("gain")!=-1) or (self.target_function.find("f2r")!=-1)
 		self.nec_file.autoSegmentation(options.auto_segmentation)
 		self.output_population = options.output_population
 		self.output_best = options.output_best
 		self.parameters = options.parameters
 		
 		self.omni= options.omni
+		self.rear_angle= options.rear_angle
 
 		self.ranges = options.sweeps
 		self.target_levels = options.target_levels
 		self.swr_target = options.swr_target
+		self.f2r_target = options.f2r_target
 		self.opt_vars = []
 		self.tanh_domain = []
 		try:
@@ -293,15 +295,20 @@ class NecFileEvaluator:
 				self.gain_diff_sum = .0
 				self.max_swr_diff = None
 				self.swr_diff_sum = .0
+				self.max_f2r_diff = None
+				self.f2r_diff_sum = .0
 				self.count = 0
-			def add(self, gain_diff, swr_diff):
+			def add(self, gain_diff, swr_diff, f2r_diff):
 				if self.max_gain_diff is None or self.max_gain_diff < gain_diff:
 					self.max_gain_diff = gain_diff
 				if self.max_swr_diff is None or self.max_swr_diff < swr_diff:
 					self.max_swr_diff = swr_diff
-				self.gain_diff_sum = self.gain_diff_sum + gain_diff
-				self.swr_diff_sum = self.swr_diff_sum + swr_diff
-				self.count = self.count + 1
+				if self.max_f2r_diff is None or self.max_f2r_diff < f2r_diff:
+					self.max_f2r_diff = f2r_diff
+				self.gain_diff_sum += gain_diff
+				self.swr_diff_sum += swr_diff
+				self.f2r_diff_sum += f2r_diff
+				self.count += 1
 
 
 		range_results = [] 
@@ -340,8 +347,12 @@ class NecFileEvaluator:
 							tl = self.targetLevel(freqid[0], freqid[1])
 						gain_diff = tl-freq.net()
 						swr_diff = (freq.swr() - self.swr_target)
+						rear = [freq.horizontalNet(phi) for phi in freq.horizontal.keys() if phi>=180-self.rear_angle/2 and  phi<=180+self.rear_angle/2]
+						if not rear: rear = 0
+						else: rear = max(rear)
 						#print "freq %g, target level %g, net %g, freqno %d, gaindiff %g, swrdiff %g"%(freq.freq, tl, freq.net(),freqid[0], gain_diff, swr_diff)
-						range_results[freqid[0]].add(gain_diff, swr_diff)
+						f2r_diff = self.f2r_target-(freq.net()-rear)
+						range_results[freqid[0]].add(gain_diff, swr_diff, f2r_diff)
 				import pprint
 				d = {}
 				d["max_gain_diff"] = -1000.0
@@ -352,6 +363,10 @@ class NecFileEvaluator:
 				d["ave_max_swr_diff"] = 0.0
 				d["max_ave_swr_diff"] = -1000.0
 				d["ave_swr_diff"] = 0.0
+				d["max_f2r_diff"] = -1000.0
+				d["ave_max_f2r_diff"] = 0.0
+				d["max_ave_f2r_diff"] = -1000.0
+				d["ave_f2r_diff"] = 0.0
 				freq_count=0
 				for i in range_results:
 					if not i.count: continue
@@ -368,11 +383,20 @@ class NecFileEvaluator:
 						d["max_ave_swr_diff"] = i.swr_diff_sum/i.count
 					d["ave_max_swr_diff"] = d["ave_max_swr_diff"]+i.max_swr_diff
 					d["ave_swr_diff"] = d["ave_swr_diff"] + i.swr_diff_sum
+					if i.max_f2r_diff > d["max_f2r_diff"]:
+						d["max_f2r_diff"] = i.max_f2r_diff
+					if d["max_ave_f2r_diff"] < i.f2r_diff_sum/i.count:
+						d["max_ave_f2r_diff"] = i.f2r_diff_sum/i.count
+					d["ave_max_f2r_diff"] = d["ave_max_f2r_diff"]+i.max_f2r_diff
+					d["ave_f2r_diff"] = d["ave_f2r_diff"] + i.f2r_diff_sum
 					freq_count = freq_count + i.count
+
 				d["ave_swr_diff"] = d["ave_swr_diff"]/freq_count
 				d["ave_gain_diff"] = d["ave_gain_diff"]/freq_count
+				d["ave_f2r_diff"] = d["ave_f2r_diff"]/freq_count
 				d["ave_max_swr_diff"] = d["ave_max_swr_diff"]/len(self.ranges)
 				d["ave_max_gain_diff"] = d["ave_max_gain_diff"]/len(self.ranges)
+				d["ave_max_f2r_diff"] = d["ave_max_f2r_diff"]/len(self.ranges)
 	
 				#pprint.pprint(d)
 				res = eval(self.target_function, d)
@@ -431,8 +455,9 @@ def optionsParser():
 			self.add_option("-M", "--max-iter", default=10000, type="int", help="The default is %default. The script can be interrupted with Ctrl+C at any time and it will output its current best result as 'output.nec'")
 			self.add_option("-L", "--local-search", action="store_true", default = False)
 			self.add_option("-T", "--local-search-tolerance", default = .0001, type="float")
-			self.add_option("-F", "--target-function", default = "max(max_gain_diff, max_swr_diff)", type='string', help="The evaluator calculates net gain and swr for each frequency of every sweep range. The optimizer then finds the difference between the gain and its target level and between the swr and its target level, thus calculating 'gain_diff' and 'swr_diff' for each frequency. As a second step it calculates the maximum and the average of those values for each sweep range: 'max_gain_diff', 'ave_gain_diff', 'max_swr_diff', 'ave_swr_diff'. Lastly it uses those value for every range and calculates the following values: 'max_gain_diff' - the absolute maximum of all gain_diffs for all frequencies, 'max_ave_gain_diff' - the maximum of all ave_gain_diffs for all sweep ranges, 'ave_max_gain_diff' - the average of all max_gain_diffs for all sweep ranges, 'ave_gain_diff' the average of all gain_diffs and the four swr counterparts 'max_swr_diff', 'max_ave_swr_diff', 'ave_max_swr_diff', 'ave_swr_diff'. The target function that the optimizer minimizes can be an expression of the last 8 values, by default it is '%default'")
+			self.add_option("-F", "--target-function", default = "max(max_gain_diff, max_swr_diff)", type='string', help="The evaluator calculates net gain, F/R ratio and swr for each frequency of every sweep range. The optimizer then finds the difference between those values and their target levels, thus calculating 'gain_diff', 'f2r_diff' and 'swr_diff' for each frequency. As a second step it calculates the maximum and the average of those values for each sweep range: 'max_gain_diff', 'ave_gain_diff', 'max_f2r_diff', 'ave_f2r_diff', 'max_swr_diff', 'ave_swr_diff'. Lastly it uses those value for every range and calculates the following values: 'max_gain_diff' - the absolute maximum of all gain_diffs for all frequencies, 'max_ave_gain_diff' - the maximum of all ave_gain_diffs for all sweep ranges, 'ave_max_gain_diff' - the average of all max_gain_diffs for all sweep ranges, 'ave_gain_diff' the average of all gain_diffs and the four F/R counterparts 'max_f2r_diff', 'max_ave_f2r_diff', 'ave_max_f2r_diff', 'ave_f2r_diff' and the four swr counterparts 'max_swr_diff', 'max_ave_swr_diff', 'ave_max_swr_diff', 'ave_swr_diff'. The target function that the optimizer minimizes can be an expression of the last 12 values, by default it is '%default'")
 			self.add_option( "--swr-target", default = 2.0, type='float', help="the default value is %default")
+			self.add_option( "--f2r-target", default = 15.0, type='float', help="the default value is %default")
 #			self.add_option( "--desqi", default = False, action="store_true")
 #			self.add_option( "--nmde", default = False, action="store_true")
 			self.add_option( "--de-dither", default = .2, type="float")
@@ -445,6 +470,7 @@ def optionsParser():
 			self.add_option("-p", "--parameters", default = "", help="If not empty restrict the list of optimization parameters to this list." )
 			self.add_option("-r", "--restart", default = "", metavar="RESTART_FILE", help="restart from population saved in a file." )
 			self.add_option("--omni", default=0, action="store_true", help="parse all horizontal angles")
+			self.add_option("--rear-angle", default=120, type="int", help="the rear angle used to calculate F/R ratio")
 
 			
 		def parse_args(self):
@@ -462,14 +488,19 @@ def optionsParser():
 				options.target_levels = [(10.,10.)]
 				options.target_function = "max_gain_diff"
 				print "No sweeps parameters specified"
+			use_f2r = False
+			options.forward = not options.frequency_data and not options.omni
+			if options.target_function.find("f2r") != -1:
+				options.forward = False
+				use_f2r = True
 			print "Sweeps set to:"
 			print options.sweeps
 			print "Target levels set to:"
 			print options.target_levels
 			print "SWR target level set to: %g:"% options.swr_target
+			if use_f2r : print "F/R target level set to: %g:"% options.f2r_target
 			print "Target function set to \"%s\"" % options.target_function
 			print "use-agt-correction set to 1"
-			options.forward = not options.frequency_data and not options.omni
 
 
 			return (options,args)

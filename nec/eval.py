@@ -1,7 +1,7 @@
 # Copyright 2010 Nikolay Mladenov, Distributed under 
 # GNU General Public License
 
-import necmath,sys, traceback
+import necmath,sys, traceback, os
 from demathutils import v3add, v3mul, v3sub, v3dot, v3cross, v3len, v3unit, v3rotx, v3roty, v3rotz
 
 output = "output"
@@ -18,6 +18,8 @@ class FrequencyData:
 		self.gain = 0
 		self.char_imp = char_imp
 		self.angle = 0
+		self.AGT = 1.0
+		self.agt = 0
 		self.horizontal = {}
 		self.vertical = {}
 
@@ -55,6 +57,14 @@ class FrequencyData:
 		angles = sorted(elf.horizontal.keys())
 		return self.horizontalNet(angles[len(angles)/2])
 
+	def rearGain(self, rear_angle):
+		rear = [self.horizontalNet(phi) for phi in self.horizontal.keys() if phi>=180-rear_angle/2. and  phi<=180+rear_angle/2.]
+		if not rear:
+			return None
+		return max(rear)
+
+		
+
 
 class NecOutputParser:
 	def __init__(self, output, agt=1, char_imp = 300, angle_step = 5, frequency_angle_data={}, omni=0):
@@ -62,33 +72,39 @@ class NecOutputParser:
 		self.char_imp = char_imp
 		self.frequency_angle_data=frequency_angle_data
 		self.angle_step = angle_step
+		self.AGT = agt
 		self.agt = 10*necmath.log10(agt)
 		self.omni = omni
 		if output:
 			self.parse(output)
 
-	def printFreqs(self, header=1):
+	def printFreqs(self, header=1, rear_angle=120):
 		if not self.frequency_angle_data:
 			if header: 
-				print "%6s %7s %7s %7s %7s %7s"%("Freq", "RawGain", "NetGain", "SWR", "Real", "Imag")
-				print "================================================"
+				print "%6s %8s %8s %7s %7s %8s %8s %12s"%("Freq", "RawGain", "NetGain", "SWR", "F/R", "Real", "Imag", "AGT(corr)")
+				print "========================================================================="
 			#if self.agt!=0:
 			#	print "AGT=%g dB"%self.agt
 			for i in self.frequencies:
 				if not i.valid():
-					print "%6.4g - invalid result"%i.freq
+					print "%6.1f - invalid result"%i.freq
 				else:
-					print "%6.4g % 7.5g % 7.5g %7.5g %7.5g % 7.5g"%(int(i.freq), i.gain, i.net(),i.swr(), i.real, i.imag)
+					rear = i.rearGain(rear_angle)
+					if rear is not None:
+						print "% 6.1f % 8.3f % 8.3f % 7.3f % 7.3f % 8.2f % 8.2f %5.2f(% 6.3f)"%(int(i.freq), i.gain, i.net(),i.swr(), i.net()-rear, i.real, i.imag, i.AGT, i.agt)
+					else:
+						print "% 6.1f % 8.3f % 8.3f % 7.3f %7s % 8.2f % 8.2f %5.2f(% 6.3f)"%(int(i.freq), i.gain, i.net(),i.swr(), "n/a", i.real, i.imag, i.AGT, i.agt)
+
 		else:
 			if header: 
-				print "%6s %7s %6s %7s %7s %7s %7s %7s %7s"%("Freq", "Target", "Angle", "RawGain", "NetGain", "SWR", "Real", "Imag", "Diff")
-				print "======================================================"
+				print "%6s %7s %6s %8s %8s %7s %8s %8s %7s %12s"%("Freq", "Target", "Angle", "RawGain", "NetGain", "SWR", "Real", "Imag", "Diff", "AGT(corr)")
+				print "========================================================================================="
 			for i in self.frequencies:
 				if not i.valid():
 					print "%6.4g - invalid result"%i.freq
 				else:
 					target = self.frequency_angle_data[i.freq][1]
-					print "%6.4g %6.2g %6.3g % 7.5g % 7.5g %7.5g %7.5g % 7.5g % 7.5g"%(int(i.freq), target, i.angle, i.gain, i.net(),i.swr(), i.real, i.imag, target-i.net())
+					print "% 6.1f % 7.2f % 6.1f % 8.3f % 8.3f % 7.3f % 8.2f % 8.2f % 7.3f %5.2f(% 6.3f)"%(int(i.freq), target, i.angle, i.gain, i.net(),i.swr(), i.real, i.imag, target-i.net(), i.AGT, i.agt)
 	def getGainSWRChartData(self):
 		res = []
 		for i in self.frequencies:
@@ -142,6 +158,8 @@ class NecOutputParser:
 				fd.real = real
 				fd.imag = imag
 				fd.freq = freq
+				fd.AGT = self.AGT
+				fd.agt = self.agt
 				while len(lines[i].strip()):
 					ln = lines[i]
 					if ln[0]=="*" or len(ln) < 8 :break
@@ -149,6 +167,9 @@ class NecOutputParser:
 						theta = float(ln[0:8])
 						phi = float(ln[8:17])
 						gain = float(ln[28:36])-self.agt
+						if theta < 0 : 
+							theta = -theta
+							phi = (phi+540)%360
 						if abs(theta)==90 :
 							fd.horizontal[phi]=gain
 						if phi == 0:
@@ -187,7 +208,11 @@ class NecFileObject:
 		self.agt_correction= options.agt_correction
 		self.min_wire_distance = options.min_wire_distance
 		self.forward = options.forward
+		self.rear_angle = options.rear_angle
 		self.calc_gain=1
+		self.engine_takes_cmd_args = 0
+		if options.engine_takes_cmd_args=='yes' or options.engine_takes_cmd_args=='auto' and os.name!='nt':
+			self.engine_takes_cmd_args = 1
 		try:self.write_js_model = options.js_model
 		except AttributeError: self.write_js_model=0
 		try:
@@ -748,30 +773,42 @@ class NecFileObject:
 		if use_agt is not None:
 			agt = use_agt
 		elif self.agt_correction or get_agt_scores :
-			f = open(exe_input,"wt")
-			f.write(agt_input)
-			f.write("\n")
-			f.write(nec_output)
-			f.write("\n")
-			f.close()
-			f = open(exe_input)
-			popen = sp.Popen(self.engine, stdin=f, stdout=open(os.devnull))
-			popen.wait()
-			f.close()
+			if self.engine_takes_cmd_args:
+				popen = sp.Popen([self.engine, agt_input, nec_output] )
+				popen.wait()
+			else:
+				try:
+					f = open(exe_input,"wt")
+					f.write(agt_input)
+					f.write("\n")
+					f.write(nec_output)
+					f.write("\n")
+					f.close()
+					f = open(exe_input)
+					popen = sp.Popen(self.engine, stdin=f, stdout=open(os.devnull))
+					popen.wait()
+				finally:
+					f.close()
 			agt = self.parseAgt(nec_output)
 			if get_agt_scores:
 				return (nec_output,agt)
 			#print "sweep (%g,%d,%g) - AGT=%g (%g)"%(sweep[0],sweep[1],sweep[2],agt,10*math.log10(agt))
-		f = open(exe_input,"wt")
-		f.write(nec_input)
-		f.write("\n")
-		f.write(nec_output)
-		f.write("\n")
-		f.close()
-		f = open(exe_input)
-		popen = sp.Popen(self.engine, stdin=f, stdout=open(os.devnull))
-		popen.wait()
-		f.close()
+		if self.engine_takes_cmd_args:
+			popen = sp.Popen([self.engine, nec_input, nec_output] )
+			popen.wait()
+		else:
+			try:
+				f = open(exe_input,"wt")
+				f.write(nec_input)
+				f.write("\n")
+				f.write(nec_output)
+				f.write("\n")
+				f.close()
+				f = open(exe_input)
+				popen = sp.Popen(self.engine, stdin=f, stdout=open(os.devnull))
+				popen.wait()
+			finally:
+				f.close()
 		return (nec_output,agt)
 		
 	def runSweepT(self, nec_input_lines, sweep, frequency_data, number, result_map, result_lock, id, get_agt_scores=0, use_agt = None ):
@@ -891,7 +928,7 @@ class NecFileObject:
 				nop = NOP(results[r][0], results[r][2], char_impedance, self.angle_step, frequency_data)
 				h.update(nop.horizontalPattern())
 				v.update(nop.verticalPattern())
-				nop.printFreqs(r==0)
+				nop.printFreqs(r==0, self.rear_angle)
 		else:
 			res = [];
 			for r in range(len(results)):
@@ -937,6 +974,7 @@ class OptionParser(optparse.OptionParser):
 		self.add_option("-n", "--num-cores", type="int", default=ncores, help="number of cores to be used, default=%default")
 		self.add_option("-a", "--auto-segmentation", metavar="NUM_SEGMENTS", type="int", default=autosegmentation, help="autosegmentation level - set to 0 to turn autosegmentation off, default=%default")
 		self.add_option("-e", "--engine", metavar="NEC_ENGINE", default="nec2dxs1k5", help="nec engine file name, default=%default")
+		self.add_option("--engine-takes-cmd-args", default="auto", type="string", help="the nec engine takes command args, default=auto (which means no on windows yes otherwise). Other options are 'yes' or 'no'.")
 		self.add_option("-d", "--min-wire-distance", default=.005, type="float", help="minimum surface-to-surface distance allowed between non-connecting wires, default=%default")
 		self.add_option("--debug", default=0, type="int", help="turn on some loging")
 	def parse_args(self):
@@ -955,7 +993,7 @@ def optionParser():
 	class MainOptionParser(OptionParser):
 		def __init__(self):
 			OptionParser.__init__(self)
-			self.add_option("--param-values-file", default="", help="Read the parameter values from file, generate output.nec and evaluate it instead of the input file. The file should contain two lines: space separated parameter name son the first and space separated values on the second.")
+			self.add_option("--param-values-file", default="", help="Read the parameter values from file, generate output.nec and evaluate it instead of the input file. The file should contain two lines: space separated parameter names on the first and space separated values on the second.")
 			self.add_option("--agt-correction", default=1, type="int", help="set to 0 to disable agt correction. It is faster but less accurate.")
 			self.add_option("-c", "--centers", default=True, help="run sweep on the channel centers",action="store_false", dest="ends")
 			self.add_option("-f", "--frequency_data", default = "{}", help="a map of frequency to (angle, expected_gain) tuple" )
@@ -963,9 +1001,11 @@ def optionParser():
 			self.add_option("--chart", default=0, action="store_true")
 			self.add_option("--js-model", default=0, action="store_true", help="write jsmodel")
 			self.add_option("--cleanup", default=0, action="store_true", help="remove output")
+			self.add_option("--rear-angle", default=120, type="int", help="angle for calculating rear gain (max 270)")
 		def parse_args(self):
 			options, args = OptionParser.parse_args(self)
 			options.frequency_data = eval(options.frequency_data)
+			if options.rear_angle<0 or options.rear_angle>270: raise ValueError("Invalid rear angle of %d"%options.rear_angle)
 			if not options.sweeps:
 				options.sweeps = [(470,6,40)]
 			if not options.ends:
