@@ -257,7 +257,7 @@ class NecFileEvaluator:
 		if self.debug: sys.stderr.write("debug: prev agt score = %g\n"%score.scores[1])
 		if s > score.scores[1]+self.agt_score_threshold:
 			if self.debug: sys.stderr.write("debug: Discarding(%d, %d, %.6g, %.6g)\n"%(self.agt_score_threshold_stat_count1, self.agt_score_threshold_stat_count2,self.agt_score_threshold_stat1,self.agt_score_threshold_stat2 ))
-			self.printLog(vector, float(score)+1, None)
+			self.printLog(self.tanhTransform(vector), float(score)+1, None)
 			return None
 		sc = self.target_(vector, 0, agts)
 		self.agt_score_threshold_stat_count2+=1
@@ -399,6 +399,7 @@ class NecFileEvaluator:
 				d["ave_max_f2r_diff"] = d["ave_max_f2r_diff"]/len(self.ranges)
 	
 				#pprint.pprint(d)
+				d.update(self.nec_file.globals)
 				res = eval(self.target_function, d)
 	
 			except:

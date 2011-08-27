@@ -612,7 +612,7 @@ class NecFileObject:
 				sline = map(fn, sline)
 				sline.insert(0, ln[0])
 				lines.append(" ".join(sline))
-		del self.globals
+		#del self.globals
 		if self.write_js_model:
 			self.writeJSModel(math_lines,comments)
 		if not self.testLineIntersections(math_lines):
@@ -683,7 +683,7 @@ class NecFileObject:
 				sl[2] = str(sline[1])
 				lines.append(" ".join(sl)+comment)
 
-		del self.globals
+		#del self.globals
 		lines.extend(extralines)
 		file = open(filename, "wt")
 		try: 
