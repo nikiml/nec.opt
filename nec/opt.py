@@ -58,7 +58,7 @@ class NecFileEvaluator:
 		self.target_function = options.target_function
 		self.char_impedance = options.char_impedance
 		self.nec_file = ne.NecFileObject(options)
-		self.nec_file.calc_gain = (self.target_function.find("gain")!=-1) or (self.target_function.find("f2r")!=-1)
+		self.nec_file.calc_gain = (self.target_function.find("gain")!=-1) or (self.target_function.find("f2r")!=-1 or (self.target_function.find("f2b")!=-1))
 		self.nec_file.autoSegmentation(options.auto_segmentation)
 		self.output_population = options.output_population
 		self.output_best = options.output_best
@@ -71,6 +71,7 @@ class NecFileEvaluator:
 		self.target_levels = options.target_levels
 		self.swr_target = options.swr_target
 		self.f2r_target = options.f2r_target
+		self.f2b_target = options.f2b_target
 		self.opt_vars = []
 		self.tanh_domain = []
 		try:
@@ -216,10 +217,10 @@ class NecFileEvaluator:
 		if range_results:
 			range_scores=[]
 			for i in range(len(self.ranges)):
-				range_scores.append(range_results[i].max_gain_diff)
-				range_scores.append(range_results[i].gain_diff_sum/max(range_results[i].count,1))
-				range_scores.append(range_results[i].max_swr_diff)
-				range_scores.append(range_results[i].swr_diff_sum/max(range_results[i].count,1))
+				range_scores.append(range_results[i].min("net_gain"))
+				range_scores.append(range_results[i].ave("net_gain"))
+				range_scores.append(range_results[i].max("swr"))
+				range_scores.append(range_results[i].ave("swr"))
 
 			range_scores = "\t"+"\t".join(map(self.nec_file.formatNumber, range_scores))
 				
@@ -310,9 +311,29 @@ class NecFileEvaluator:
 				self.f2r_diff_sum += f2r_diff
 				self.count += 1
 
+		class ExtensibleRangeResult:
+			def __init__(self):
+				self.data = {}
+			def add(self, param, value):
+				if param not in self.data:
+					self.data[param]=[value]
+				else:
+					self.data[param].append(value)
+			def max(self, param):
+				if param not in self.data:
+					return 1000
+				return max(self.data[param])
+			def min(self, param):
+				if param not in self.data:
+					return -1000
+				return max(self.data[param])
+			def ave(self, param):
+				if param not in self.data:
+					return 0
+				return sum(self.data[param])/len(self.data[param])
 
 		range_results = [] 
-		for i in range(len(self.ranges)): range_results.append(RangeResult())
+		for i in range(len(self.ranges)): range_results.append(ExtensibleRangeResult())
 
 		vector = self.tanhTransform(vector)
 		for i in xrange(len(self.opt_vars)):
@@ -345,58 +366,69 @@ class NecFileEvaluator:
 							tl = self.frequency_data[freq.freq][1]
 						else:
 							tl = self.targetLevel(freqid[0], freqid[1])
-						gain_diff = tl-freq.net()
-						swr_diff = (freq.swr() - self.swr_target)
-						rear = [freq.horizontalNet(phi) for phi in freq.horizontal.keys() if phi>=180-self.rear_angle/2 and  phi<=180+self.rear_angle/2]
-						if not rear: rear = 0
-						else: rear = max(rear)
+						net = freq.net()
+						gain_diff = tl-net
+						range_results[freqid[0]].add("gain_diff", gain_diff)
+						range_results[freqid[0]].add("net_gain", net)
+						range_results[freqid[0]].add("raw_gain", freq.gain)
+						swr = freq.swr()
+						swr_diff = (swr - self.swr_target)
+						range_results[freqid[0]].add("swr_diff", swr_diff)
+						range_results[freqid[0]].add("swr", swr)
+						rear = freq.rearGain(self.rear_angle) #[freq.horizontalNet(phi) for phi in freq.horizontal.keys() if phi>=180-self.rear_angle/2 and  phi<=180+self.rear_angle/2]
+						if rear is None: rear = 0
 						#print "freq %g, target level %g, net %g, freqno %d, gaindiff %g, swrdiff %g"%(freq.freq, tl, freq.net(),freqid[0], gain_diff, swr_diff)
-						f2r_diff = self.f2r_target-(freq.net()-rear)
-						range_results[freqid[0]].add(gain_diff, swr_diff, f2r_diff)
+						f2r = (net-rear)
+						f2r_diff = self.f2r_target-f2r
+						range_results[freqid[0]].add("f2r_diff", f2r_diff)
+						range_results[freqid[0]].add("f2r", f2r)
+						back = freq.rearGain(.002) 
+						if back is None: back = 0
+						f2b = (net-back)
+						f2b_diff = self.f2b_target-f2b
+						range_results[freqid[0]].add("f2b_diff", f2b_diff)
+						range_results[freqid[0]].add("f2b", f2b)
+
+						ml = freq.gain - net
+						range_results[freqid[0]].add("ml", ml)
+						range_results[freqid[0]].add("real", freq.real)
+						range_results[freqid[0]].add("imag", freq.imag)
+						range_results[freqid[0]].add("agt_correction", freq.agt)
+
+#						range_results[freqid[0]].add(gain_diff, swr_diff, f2r_diff)
 				import pprint
 				d = {}
-				d["max_gain_diff"] = -1000.0
-				d["ave_max_gain_diff"] = 0.0
-				d["max_ave_gain_diff"] = -1000.0
-				d["ave_gain_diff"] = 0.0
-				d["max_swr_diff"] = -1000.0
-				d["ave_max_swr_diff"] = 0.0
-				d["max_ave_swr_diff"] = -1000.0
-				d["ave_swr_diff"] = 0.0
-				d["max_f2r_diff"] = -1000.0
-				d["ave_max_f2r_diff"] = 0.0
-				d["max_ave_f2r_diff"] = -1000.0
-				d["ave_f2r_diff"] = 0.0
 				freq_count=0
-				for i in range_results:
-					if not i.count: continue
-					#pprint.pprint(i.__dict__)
-					if i.max_gain_diff > d["max_gain_diff"]:
-						d["max_gain_diff"] = i.max_gain_diff
-					if d["max_ave_gain_diff"] < i.gain_diff_sum/i.count:
-						d["max_ave_gain_diff"] = i.gain_diff_sum/i.count
-					d["ave_max_gain_diff"] = d["ave_max_gain_diff"]+i.max_gain_diff
-					d["ave_gain_diff"] = d["ave_gain_diff"] + i.gain_diff_sum
-					if i.max_swr_diff > d["max_swr_diff"]:
-						d["max_swr_diff"] = i.max_swr_diff
-					if d["max_ave_swr_diff"] < i.swr_diff_sum/i.count:
-						d["max_ave_swr_diff"] = i.swr_diff_sum/i.count
-					d["ave_max_swr_diff"] = d["ave_max_swr_diff"]+i.max_swr_diff
-					d["ave_swr_diff"] = d["ave_swr_diff"] + i.swr_diff_sum
-					if i.max_f2r_diff > d["max_f2r_diff"]:
-						d["max_f2r_diff"] = i.max_f2r_diff
-					if d["max_ave_f2r_diff"] < i.f2r_diff_sum/i.count:
-						d["max_ave_f2r_diff"] = i.f2r_diff_sum/i.count
-					d["ave_max_f2r_diff"] = d["ave_max_f2r_diff"]+i.max_f2r_diff
-					d["ave_f2r_diff"] = d["ave_f2r_diff"] + i.f2r_diff_sum
-					freq_count = freq_count + i.count
+				for result in range_results:
+					for k in result.data.keys():
+						x = max(result.data[k])
+						n = min(result.data[k])
+						s = sum(result.data[k])
+						c = len(result.data[k])
+						a = s/c
+						if "max_"+k not in d:
+							d["max_"+k] = x
+							d["ave_max_"+k] = x
+							d["max_ave_"+k] = a
+							d["ave_"+k] = s
+							d["min_"+k] = n
+							d["ave_min_"+k] = n
+							d["min_ave_"+k] = a
+						else:
+							d["max_"+k] = max(m,d["max_"+k])
+							d["ave_max_"+k] += m
+							d["max_ave_"+k] = max(a,d["max_ave_"+k])
+							d["ave_"+k] += s
+							d["min_"+k] = max(n,d["min_"+k])
+							d["ave_min_"+k] += n
+							d["min_ave_"+k] = min(a,d["min_ave_"+k])
+					freq_count = freq_count + c
 
-				d["ave_swr_diff"] = d["ave_swr_diff"]/freq_count
-				d["ave_gain_diff"] = d["ave_gain_diff"]/freq_count
-				d["ave_f2r_diff"] = d["ave_f2r_diff"]/freq_count
-				d["ave_max_swr_diff"] = d["ave_max_swr_diff"]/len(self.ranges)
-				d["ave_max_gain_diff"] = d["ave_max_gain_diff"]/len(self.ranges)
-				d["ave_max_f2r_diff"] = d["ave_max_f2r_diff"]/len(self.ranges)
+				for k in d.keys():
+					if k[:7]=="ave_max": d[k]/=len(self.ranges)
+					elif k[:7]=="ave_min": d[k]/=len(self.ranges)
+					elif k[:3]=="ave": d[k]/=freq_count
+
 	
 				#pprint.pprint(d)
 				d.update(self.nec_file.globals)
@@ -456,9 +488,10 @@ def optionsParser():
 			self.add_option("-M", "--max-iter", default=10000, type="int", help="The default is %default. The script can be interrupted with Ctrl+C at any time and it will output its current best result as 'output.nec'")
 			self.add_option("-L", "--local-search", action="store_true", default = False)
 			self.add_option("-T", "--local-search-tolerance", default = .0001, type="float")
-			self.add_option("-F", "--target-function", default = "max(max_gain_diff, max_swr_diff)", type='string', help="The evaluator calculates net gain, F/R ratio and swr for each frequency of every sweep range. The optimizer then finds the difference between those values and their target levels, thus calculating 'gain_diff', 'f2r_diff' and 'swr_diff' for each frequency. As a second step it calculates the maximum and the average of those values for each sweep range: 'max_gain_diff', 'ave_gain_diff', 'max_f2r_diff', 'ave_f2r_diff', 'max_swr_diff', 'ave_swr_diff'. Lastly it uses those value for every range and calculates the following values: 'max_gain_diff' - the absolute maximum of all gain_diffs for all frequencies, 'max_ave_gain_diff' - the maximum of all ave_gain_diffs for all sweep ranges, 'ave_max_gain_diff' - the average of all max_gain_diffs for all sweep ranges, 'ave_gain_diff' the average of all gain_diffs and the four F/R counterparts 'max_f2r_diff', 'max_ave_f2r_diff', 'ave_max_f2r_diff', 'ave_f2r_diff' and the four swr counterparts 'max_swr_diff', 'max_ave_swr_diff', 'ave_max_swr_diff', 'ave_swr_diff'. The target function that the optimizer minimizes can be an expression of the last 12 values plus any of the nec file parameters, by default it is '%default'")
+			self.add_option("-F", "--target-function", default = "max(max_gain_diff, max_swr_diff)", type='string', help="An expression composed of statistical tokens and any of the nec file parameters, by default it is '%default'. All statistical tokes are of the form min_\"value\", max_\"value\", ave_\"value\", min_ave_\"value\", max_ave_\"value\", ave_min_\"value\" and ave_max_\"value\", where \"value\" is one of the following: gain_diff, swr_diff, f2r_diff, f2b_diff, net_gain, raw_gain, ml, swr, agt_correction, f2r, f2b, real and  imag.")
 			self.add_option( "--swr-target", default = 2.0, type='float', help="the default value is %default")
 			self.add_option( "--f2r-target", default = 15.0, type='float', help="the default value is %default")
+			self.add_option( "--f2b-target", default = 15.0, type='float', help="the default value is %default")
 #			self.add_option( "--desqi", default = False, action="store_true")
 #			self.add_option( "--nmde", default = False, action="store_true")
 			self.add_option( "--de-dither", default = .2, type="float")

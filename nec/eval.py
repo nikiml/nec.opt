@@ -144,7 +144,9 @@ class NecOutputParser:
 #				self.frequencies[-1].freq = freq
 			elif ln == "- - - ANTENNA INPUT PARAMETERS - - -":
 				i=i+4
-				real = max((float(lines[i][60:72])),.1) # at least one linux engine has calculated negative real impedance...
+				real = float(lines[i][60:72]) # at least one linux engine has calculated negative real impedance...
+				if real < 0:
+					raise ValueError("engine reported negative real impedance for frequency %.1f"%freq)
 				imag = float(lines[i][72:84])
 #				self.frequencies[-1].real = float(lines[i][60:72])
 #				self.frequencies[-1].imag = float(lines[i][72:84])
