@@ -91,9 +91,9 @@ class NecOutputParser:
 				else:
 					rear = i.rearGain(rear_angle)
 					if rear is not None:
-						print "% 6.1f % 8.3f % 8.3f % 7.3f % 7.3f % 8.2f % 8.2f %5.2f(% 6.3f)"%(int(i.freq), i.gain, i.net(),i.swr(), i.net()-rear, i.real, i.imag, i.AGT, i.agt)
+						print "% 6.1f % 8.3f % 8.3f % 7.3f % 7.3f % 8.2f % 8.2f %5.2f(% 6.3f)"%(i.freq, i.gain, i.net(),i.swr(), i.net()-rear, i.real, i.imag, i.AGT, i.agt)
 					else:
-						print "% 6.1f % 8.3f % 8.3f % 7.3f %7s % 8.2f % 8.2f %5.2f(% 6.3f)"%(int(i.freq), i.gain, i.net(),i.swr(), "n/a", i.real, i.imag, i.AGT, i.agt)
+						print "% 6.1f % 8.3f % 8.3f % 7.3f %7s % 8.2f % 8.2f %5.2f(% 6.3f)"%(i.freq, i.gain, i.net(),i.swr(), "n/a", i.real, i.imag, i.AGT, i.agt)
 
 		else:
 			if header: 
@@ -104,7 +104,7 @@ class NecOutputParser:
 					print "%6.4g - invalid result"%i.freq
 				else:
 					target = self.frequency_angle_data[i.freq][1]
-					print "% 6.1f % 7.2f % 6.1f % 8.3f % 8.3f % 7.3f % 8.2f % 8.2f % 7.3f %5.2f(% 6.3f)"%(int(i.freq), target, i.angle, i.gain, i.net(),i.swr(), i.real, i.imag, target-i.net(), i.AGT, i.agt)
+					print "% 6.1f % 7.2f % 6.1f % 8.3f % 8.3f % 7.3f % 8.2f % 8.2f % 7.3f %5.2f(% 6.3f)"%(i.freq, target, i.angle, i.gain, i.net(),i.swr(), i.real, i.imag, target-i.net(), i.AGT, i.agt)
 	def getGainSWRChartData(self):
 		res = []
 		for i in self.frequencies:
@@ -144,7 +144,7 @@ class NecOutputParser:
 #				self.frequencies[-1].freq = freq
 			elif ln == "- - - ANTENNA INPUT PARAMETERS - - -":
 				i=i+4
-				real = float(lines[i][60:72])
+				real = max((float(lines[i][60:72])),.1) # at least one linux engine has calculated negative real impedance...
 				imag = float(lines[i][72:84])
 #				self.frequencies[-1].real = float(lines[i][60:72])
 #				self.frequencies[-1].imag = float(lines[i][72:84])
