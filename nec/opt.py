@@ -326,7 +326,7 @@ class NecFileEvaluator:
 			def min(self, param):
 				if param not in self.data:
 					return -1000
-				return max(self.data[param])
+				return min(self.data[param])
 			def ave(self, param):
 				if param not in self.data:
 					return 0
@@ -400,6 +400,7 @@ class NecFileEvaluator:
 				d = {}
 				freq_count=0
 				for result in range_results:
+					c = 0
 					for k in result.data.keys():
 						x = max(result.data[k])
 						n = min(result.data[k])
@@ -415,11 +416,11 @@ class NecFileEvaluator:
 							d["ave_min_"+k] = n
 							d["min_ave_"+k] = a
 						else:
-							d["max_"+k] = max(m,d["max_"+k])
-							d["ave_max_"+k] += m
+							d["max_"+k] = max(x,d["max_"+k])
+							d["ave_max_"+k] += x
 							d["max_ave_"+k] = max(a,d["max_ave_"+k])
 							d["ave_"+k] += s
-							d["min_"+k] = max(n,d["min_"+k])
+							d["min_"+k] = min(n,d["min_"+k])
 							d["ave_min_"+k] += n
 							d["min_ave_"+k] = min(a,d["min_ave_"+k])
 					freq_count = freq_count + c
