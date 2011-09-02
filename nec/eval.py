@@ -331,10 +331,11 @@ class NecFileObject:
 		return self.scale*necmath.sqrt(necmath.pow(line[2]-line[5],2)+necmath.pow(line[3]-line[6],2)+necmath.pow(line[4]-line[7],2))
 
 	def autoSegment(self, line):
-		nsegs = self.calcLength(line)*self.autosegment[0]/self.autosegment[1]
+		length = self.calcLength(line) 
+		nsegs = length*self.autosegment[0]/self.autosegment[1]
 		line[1] = max(int(nsegs+.5),1)
 		if line[0] in self.source_tags:
-			line[1]=line[1]+2
+			if line[1] > 2: line[1]=line[1]+2
 			if line[1] % 2 == 0:
 				line[1]=line[1]+1
 			self.varlines[self.source_tags[line[0]][0]][3] = str(int(line[1]/2)+1)

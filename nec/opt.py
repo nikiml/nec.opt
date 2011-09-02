@@ -217,8 +217,8 @@ class NecFileEvaluator:
 		if range_results:
 			range_scores=[]
 			for i in range(len(self.ranges)):
-				range_scores.append(range_results[i].min("net_gain"))
-				range_scores.append(range_results[i].ave("net_gain"))
+				range_scores.append(range_results[i].max("gain_diff"))
+				range_scores.append(range_results[i].ave("gain_diff"))
 				range_scores.append(range_results[i].max("swr"))
 				range_scores.append(range_results[i].ave("swr"))
 
