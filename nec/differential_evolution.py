@@ -147,7 +147,7 @@ data members:
             min_value(self.scores),
             mean_value(map(float,self.scores)),
             self.population[ min_index( self.scores ) ],
-            'Final')
+            'Final',0)
 
 
   def optimize(self):
@@ -157,8 +157,8 @@ data members:
     monitor_score = mean_value( map(float,self.scores ))
     count = 0
     while not converged:
-      self.evolve()
-      self.evaluator.iterationCallback(count, self.population, self.scores)
+      improved = self.evolve()
+      self.evaluator.iterationCallback(count, self.population, self.scores, improved)
       location = min_index( self.scores )
       if self.show_progress:
         if count%self.show_progress_nth_cycle==0:
@@ -168,7 +168,7 @@ data members:
             min_value(self.scores),
             mean_value(map(float,self.scores)),
             self.population[ min_index( self.scores ) ],
-            count)
+            count, improved)
 
       count += 1
       if count%self.monitor_cycle==0:
@@ -218,6 +218,7 @@ data members:
 
   def evolve(self):
     new_population=[[]]*self.population_size
+    improved = 0
     for ii in xrange(self.population_size):
       rnd = random_double(self.population_size-1)
       permut = sort_permutation(rnd)
@@ -257,6 +258,7 @@ data members:
       if test_score is not None:
         self.scores[ii] = test_score
         new_population[ii] = test_vector
+	improved+=1
     for ii in xrange(self.population_size):
       if new_population[ii]:
         self.population[ii]=new_population[ii]
@@ -271,6 +273,7 @@ data members:
     self.best_score = float(min_value( self.scores ))
     self.best_vector = self.population[ min_index( self.scores ) ]
     self.evaluator.x = self.best_vector
+    return improved
 
   def show_population(self):
     print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++"

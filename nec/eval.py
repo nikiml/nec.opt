@@ -9,6 +9,9 @@ input = "input.nec"
 autosegmentation=10
 ncores=4
 
+class GeometryError (RuntimeError):
+	def __init__(self, msg):
+		RuntimeError.__init__(self,msg)
 
 class FrequencyData:
 	def __init__(self, char_imp):
@@ -150,16 +153,17 @@ class NecOutputParser:
 				imag = float(lines[i][72:84])
 #				self.frequencies[-1].real = float(lines[i][60:72])
 #				self.frequencies[-1].imag = float(lines[i][72:84])
+				fd = FrequencyData(self.char_imp)
+				fd.real = real
+				fd.imag = imag
+				self.frequencies.append(fd)
+				fd.freq = freq
 			elif ln =="- - - RADIATION PATTERNS - - -":
 				i=i+5
 				angle = 0
 #				freq = self.frequencies[-1].freq
 				if freq in self.frequency_angle_data.keys():
 					angle = self.frequency_angle_data[freq][0]
-				fd = FrequencyData(self.char_imp)
-				fd.real = real
-				fd.imag = imag
-				fd.freq = freq
 				fd.AGT = self.AGT
 				fd.agt = self.agt
 				while len(lines[i].strip()):
@@ -182,7 +186,6 @@ class NecOutputParser:
 						i = i+1
 					except:
 						break
-				self.frequencies.append(fd)
 			i = i+1
 		if self.frequency_angle_data:
 			freqs = []
@@ -221,6 +224,14 @@ class NecFileObject:
 			self.debug = options.debug
 		except AttributeError:
 			self.debug = 0
+		try:
+			self.quiet = options.quiet
+		except AttributeError:
+			self.quiet = False
+		try:
+			self.verbose = options.verbose
+		except AttributeError:
+			self.verbose = True
 		if self.sourcefile:
 			self.readSource(self.sourcefile)
 			try:
@@ -371,16 +382,16 @@ class NecFileObject:
 	def testLineIntersection(self, tag1, tag2, line1, line2, r1, r2):
 		if line1[0]==line2[0]:
 			if line1[1]!=line2[1]:return 1
-			else :	raise RuntimeError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, 0))
+			else :	raise GeometryError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, 0))
 		if line1[0]==line2[1]:
 			if line1[1]!=line2[0]:return 1
-			else :	raise RuntimeError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, 0))
+			else :	raise GeometryError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, 0))
 		if line1[1]==line2[0]:
 			if line1[0]!=line2[1]:return 1
-			else :	raise RuntimeError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, 0))
+			else :	raise GeometryError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, 0))
 		if line1[1]==line2[1]:
 			if line1[0]!=line2[0]:return 1
-			else :	raise RuntimeError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, 0))
+			else :	raise GeometryError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, 0))
 		#print "line1[0] = [%f, %f, %f]"%tuple(line1[0])
 		#print "line1[1] = [%f, %f, %f]"%tuple(line1[1])
 		#print "line2[0] = [%f, %f, %f]"%tuple(line2[0])
@@ -388,12 +399,12 @@ class NecFileObject:
 		v1 = v3sub(line1[1],line1[0])
 		l = v3len(v1)
 		if not l:
-			raise RuntimeError("Line with 0 length (tag %d)"%tag1)
+			raise GeometryError("Line with 0 length (tag %d)"%tag1)
 		v1 = v3mul(1.0/l,v1)
 		v2 = v3sub(line2[1],line2[0])
 		l = v3len(v2)
 		if not l:
-			raise RuntimeError("Line with 0 length (tag %d)"%tag2)
+			raise GeometryError("Line with 0 length (tag %d)"%tag2)
 		v2 = v3mul(1.0/l,v2)
 		n = v3unit(v3cross(v1,v2))
 		#print "v1 = [%f, %f, %f]"%tuple(v1)
@@ -412,7 +423,7 @@ class NecFileObject:
 			v2 = v3sub(line2[0], line1[0])
 			d = d * v3dot(v1,v2)
 			if d < 0 :
-				raise RuntimeError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
+				raise GeometryError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
 			elif d == 0:
 				zerocount = zerocount+1
 			v2 = v3sub(line2[1], line1[1])
@@ -420,7 +431,7 @@ class NecFileObject:
 			v2 = v3sub(line2[0], line1[1])
 			d = d * v3dot(v1,v2)
 			if d < 0 :
-				raise RuntimeError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
+				raise GeometryError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
 			elif d == 0:
 				zerocount = zerocount+1
 
@@ -429,7 +440,7 @@ class NecFileObject:
 			v2 = v3sub(line1[0], line2[1])
 			d = d * v3dot(v1,v2)
 			if d < 0 :
-				raise RuntimeError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
+				raise GeometryError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
 			elif d == 0:
 				zerocount = zerocount+1
 
@@ -439,12 +450,12 @@ class NecFileObject:
 			v2 = v3sub(line1[0], line2[0])
 			d = d * v3dot(v1,v2)
 			if d < 0 :
-				raise RuntimeError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
+				raise GeometryError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
 			elif d == 0:
 				zerocount = zerocount+1
 
 			if zerocount > 2 :
-				raise RuntimeError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
+				raise GeometryError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
 
 			return 1
 
@@ -472,7 +483,7 @@ class NecFileObject:
 		dot2 = v3dot(c3, n)*v3dot(c4, n)
 		#print (dot1, dot2)
 		if dot1 < 0 and dot2 < 0:
-				raise RuntimeError("Intersecting lines (tag %d and tag %d)"%(tag1, tag2))
+				raise GeometryError("Intersecting lines (tag %d and tag %d)"%(tag1, tag2))
 		return 1
 	def testLineIntersections(self, lines):
 		nlines= len(lines)
@@ -570,7 +581,7 @@ class NecFileObject:
 			try: exec d in  necmath.__dict__, self.globals
 			except:
 				traceback.print_exc()
-				print "failed parsing '%s'"%(d)
+				sys.stderr.write( "failed parsing '%s'\n"%(d))
 				raise
 		for li in range(len(self.varlines)):
 			ln = self.varlines[li]
@@ -663,7 +674,7 @@ class NecFileObject:
 			try: exec(d, necmath.__dict__, self.globals)
 			except:
 				traceback.print_exc()
-				print "failed parsing '%s'"%(d)
+				sys.stderr.write("failed parsing '%s'\n"%(d))
 				raise
 		has_comments = 0
 		for ln in self.lines:
@@ -709,10 +720,10 @@ class NecFileObject:
 				in_sweep = 0
 				for freq in sorted(frequency_data.keys()):
 					if freq>=sweep[0] and freq<=sweep[0]+sweep[1]*sweep[2]:
-						if not in_sweep:
-							lines.append("EK")
-							lines.append("FR 0 1 0 0 %g 0"%freq)
-							lines.append("XQ")
+						#if not in_sweep:
+						#	lines.append("EK")
+						#	lines.append("FR 0 1 0 0 %g 0"%freq)
+						#	lines.append("XQ")
 						in_sweep=1
 						lines.append("FR 0 1 0 0 %g 0"%freq)
 						lines.append("RP 0 1 1 1000 90 %g 0 0"%frequency_data[freq][0])
@@ -749,6 +760,7 @@ class NecFileObject:
 		return lines
 	
 	def runSweep(self, nec_input_lines, sweep, frequency_data, get_agt_scores=0, use_agt = None):
+		#print "Get agt score = %d"%get_agt_scores
 		import tempfile as tmp
 		import subprocess as sp
 		import os
@@ -886,7 +898,7 @@ class NecFileObject:
 		try:
 			nec_input_lines = self.necInputLines()
 		except:
-			traceback.print_exc()
+			if self.verbose: traceback.print_exc()
 			return
 
 		from threading import Lock, Thread
