@@ -460,6 +460,8 @@ class NecFileEvaluator:
 				fn = fn.replace(".","_")
 				fn = fn+".nec"
 				self.nec_file.writeParametrized(fn, comments = self.comments+["Score %g"%res,""])
+			if self.quiet:
+				print "Best score : %.5f"%res
 
 	def print_status(self, minv, meanv, vector, count,improved):
 		if self.quiet: return
