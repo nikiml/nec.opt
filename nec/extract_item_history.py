@@ -17,21 +17,24 @@ def parseLogFile(filename, np, population_member=0, number_of_lines=None):
 		return ()
 
 	vars = lines[i].split()[1:]
-	lines = lines[i+1+population_member:-1:np]
-	if number_of_lines !=None and number_of_lines > len(lines):
-		lines = lines[-number_of_lines:-1]
+	lines = lines[i+1:]
+	#if number_of_lines !=None and number_of_lines > len(lines):
+	#	lines = lines[-number_of_lines:-1]
 
-
+	c = 0
 	scores = []
 	population = []
 	for ln in lines:
+		if ln[0]=='#': continue
+		c+=1
+		if (c-1) % np != population_member:
+			continue
 		ln = ln.split()
 		score = float(ln[0])
 		if not scores or score < scores[-1]:
 			scores.append(score)
 			population.append(map(floatOrNone, ln[1:]))
 	
-
 	return (vars,scores, population)
 
 

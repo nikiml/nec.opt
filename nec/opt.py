@@ -3,7 +3,7 @@
 
 
 import differential_evolution as DE
-import os, math,sys,traceback
+import os, math,sys,traceback,time
 from nec import eval as ne
 
 class NecFileEvaluator:
@@ -55,6 +55,7 @@ class NecFileEvaluator:
 	def __init__(self, options):
 			#.input, options.output,options.auto_segmentation, options.sweeps, options.target_levels,options.num_cores, options.log_file, options.target_function
 		self.log = None
+		self.options = options
 		self.target_function = options.target_function
 		self.char_impedance = options.char_impedance
 		self.nec_file = ne.NecFileObject(options)
@@ -139,6 +140,8 @@ class NecFileEvaluator:
 
 			self.log.write(self.nec_file.formatName("Score")+"\t"+"\t".join(map(self.nec_file.formatName, sorted(self.opt_vars)))+"\t"+"\t".join(map(self.nec_file.formatName, range_scores))+"\n")
 			self.log.flush()
+		self.time = time.time()
+		self.start_time = self.time
 
 	def __del__(self):
 		if self.log:
@@ -279,6 +282,8 @@ class NecFileEvaluator:
 				self.agt_score_threshold_stat1 = 0
 				self.agt_score_threshold_stat2 = 0
 				if self.debug: print "new agt threshold = %.6g"%self.agt_score_threshold
+				if self.log:
+					self.log.write("#new agt threshold = %.6g\n"%self.agt_score_threshold)
 
 			return NecFileEvaluator.Score(sc,s)
 		if self.debug: sys.stderr.write("debug: Discarding(%d, %d, %.6g, %.6g)\n"%(self.agt_score_threshold_stat_count1, self.agt_score_threshold_stat_count2,self.agt_score_threshold_stat1,self.agt_score_threshold_stat2 ))
@@ -354,30 +359,33 @@ class NecFileEvaluator:
 							tl = self.frequency_data[freq.freq][1]
 						else:
 							tl = self.targetLevel(freqid[0], freqid[1])
-						net = freq.net()
+						net = freq.forwardGain(self.options.forward_dir)
 						gain_diff = tl-net
 						range_results[freqid[0]].add("gain_diff", gain_diff)
 						range_results[freqid[0]].add("net_gain", net)
-						range_results[freqid[0]].add("raw_gain", freq.gain)
+						raw_gain = freq.forwardRaw(self.options.forward_dir)
+						range_results[freqid[0]].add("raw_gain", raw_gain)
 						swr = freq.swr()
 						swr_diff = (swr - self.swr_target)
 						range_results[freqid[0]].add("swr_diff", swr_diff)
 						range_results[freqid[0]].add("swr", swr)
-						rear = freq.rearGain(self.rear_angle) #[freq.horizontalNet(phi) for phi in freq.horizontal.keys() if phi>=180-self.rear_angle/2 and  phi<=180+self.rear_angle/2]
+						rear = freq.rearGain(self.rear_angle, self.options.backward_dir) #[freq.horizontalNet(phi) for phi in freq.horizontal.keys() if phi>=180-self.rear_angle/2 and  phi<=180+self.rear_angle/2]
 						if rear is None: rear = 0
 						#print "freq %g, target level %g, net %g, freqno %d, gaindiff %g, swrdiff %g"%(freq.freq, tl, freq.net(),freqid[0], gain_diff, swr_diff)
 						f2r = (net-rear)
 						f2r_diff = self.f2r_target-f2r
 						range_results[freqid[0]].add("f2r_diff", f2r_diff)
 						range_results[freqid[0]].add("f2r", f2r)
-						back = freq.rearGain(.002) 
+						back = freq.rearGain(.002, self.options.backward_dir) 
 						if back is None: back = 0
+						range_results[freqid[0]].add("back", back)
+						range_results[freqid[0]].add("rear", rear)
 						f2b = (net-back)
 						f2b_diff = self.f2b_target-f2b
 						range_results[freqid[0]].add("f2b_diff", f2b_diff)
 						range_results[freqid[0]].add("f2b", f2b)
 
-						ml = freq.gain - net
+						ml = raw_gain - net
 						range_results[freqid[0]].add("ml", ml)
 						range_results[freqid[0]].add("real", freq.real)
 						range_results[freqid[0]].add("imag", freq.imag)
@@ -385,6 +393,7 @@ class NecFileEvaluator:
 
 #						range_results[freqid[0]].add(gain_diff, swr_diff, f2r_diff)
 				import pprint
+				if self.debug  : pprint.pprint(map(lambda x: x.data,range_results))
 				d = {}
 				freq_count=0
 				for result in range_results:
@@ -419,7 +428,7 @@ class NecFileEvaluator:
 					elif k[:3]=="ave": d[k]/=freq_count
 
 	
-				#pprint.pprint(d)
+				if self.debug > 1 : pprint.pprint(d)
 				d.update(self.nec_file.globals)
 				res = eval(self.target_function, d)
 	
@@ -460,10 +469,17 @@ class NecFileEvaluator:
 				fn = fn.replace(".","_")
 				fn = fn+".nec"
 				self.nec_file.writeParametrized(fn, comments = self.comments+["Score %g"%res,""])
-			if self.quiet:
+			if self.quiet :
 				print "Best score : %.5f"%res
+			elif self.options.local_search and not self.verbose:
+				print "\nBest score : %.5f"%res
 
 	def print_status(self, minv, meanv, vector, count,improved):
+		t = time.time()
+		t-=self.time
+		self.time+=t
+		if self.log:
+			self.log.write("#Total time %d sec., Iteration time %d sec.\n"%(int(self.time-self.start_time), t))
 		if self.quiet: return
 		vector = self.tanhTransform(vector)
 		z = sorted(zip(self.opt_vars,vector))
@@ -471,8 +487,8 @@ class NecFileEvaluator:
 		sorted_vect = [x[1] for x in z]
 		if self.verbose:print "====================================================================="
 		else: sys.stdout.write('\n')
-		if not improved: print "% 5s. Min score %g, Mean score %g"%(str(count), minv, meanv)
-		else : print "% 5s. Min score %g, Mean score %g, Improved %d memebers"%(str(count), minv, meanv, improved)
+		if not improved: print "% 5s. Min score %g, Mean score %g, IterTime(%d sec)"%(str(count), minv, meanv, int(t))
+		else : print "% 5s. Min score %g, Mean score %g, Improved %d members, IterTime(%d sec)"%(str(count), minv, meanv, improved, int(t))
 		if self.verbose:print "\t".join(map(self.nec_file.formatName, sorted_vars))
 		if self.verbose:print "\t".join(map(self.nec_file.formatNumber, sorted_vect))
 		if self.verbose:print "====================================================================="
@@ -530,7 +546,7 @@ def optionsParser():
 				sys.stderr.write("WARNING: No sweeps parameters specified\n")
 			use_f2r = False
 			options.forward = not options.frequency_data and not options.omni
-			if options.target_function.find("f2r") != -1:
+			if options.target_function.find("f2r") != -1 or options.target_function.find("f2b") != -1 or options.forward_dir!=0 or options.backward_dir != 180:
 				options.forward = False
 				use_f2r = True
 			if not options.quiet: 

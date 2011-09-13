@@ -47,21 +47,27 @@ class FrequencyData:
 	def horizontalNet(self, phi):
 		return self.net(self.horizontal[phi])
 
+	def horizontalRaw(self, phi):
+		return self.horizontal[phi]
+
 	def verticalNet(self, theta):
 		return self.net(self.vertical[theta])
 		
 	def __str__(self):
 		return "%d Mhz - raw(%f), net(%f), swr(%f), real(%f), imag(%f)"%(int(self.freq), self.gain, self.net(), self.swr(), self.real, self.imag)
 
-	def forwardGain(self):
-		return self.horizontalNet(0)
+	def forwardGain(self, forward_dir = 0):
+		return self.horizontalNet(forward_dir)
+
+	def forwardRaw(self, forward_dir = 0):
+		return self.horizontalRaw(forward_dir)
 
 	def backwardGain(self):
 		angles = sorted(elf.horizontal.keys())
 		return self.horizontalNet(angles[len(angles)/2])
 
-	def rearGain(self, rear_angle):
-		rear = [self.horizontalNet(phi) for phi in self.horizontal.keys() if phi>=180-rear_angle/2. and  phi<=180+rear_angle/2.]
+	def rearGain(self, rear_angle, backward_dir = 180):
+		rear = [self.horizontalNet(phi) for phi in self.horizontal.keys() if phi>=backward_dir-rear_angle/2. and  phi<=backward_dir+rear_angle/2.]
 		if not rear:
 			return None
 		return max(rear)
@@ -81,7 +87,7 @@ class NecOutputParser:
 		if output:
 			self.parse(output)
 
-	def printFreqs(self, header=1, rear_angle=120):
+	def printFreqs(self, header=1, rear_angle=120, forward_dir = 0, backward_dir = 180):
 		if not self.frequency_angle_data:
 			if header: 
 				print "%6s %8s %8s %7s %7s %8s %8s %12s"%("Freq", "RawGain", "NetGain", "SWR", "F/R", "Real", "Imag", "AGT(corr)")
@@ -92,11 +98,11 @@ class NecOutputParser:
 				if not i.valid():
 					print "%6.1f - invalid result"%i.freq
 				else:
-					rear = i.rearGain(rear_angle)
+					rear = i.rearGain(rear_angle,backward_dir)
 					if rear is not None:
-						print "% 6.1f % 8.3f % 8.3f % 7.3f % 7.3f % 8.2f % 8.2f %5.2f(% 6.3f)"%(i.freq, i.gain, i.net(),i.swr(), i.net()-rear, i.real, i.imag, i.AGT, i.agt)
+						print "% 6.1f % 8.3f % 8.3f % 7.3f % 7.3f % 8.2f % 8.2f %5.2f(% 6.3f)"%(i.freq, i.gain, i.horizontalNet(forward_dir),i.swr(), i.net()-rear, i.real, i.imag, i.AGT, i.agt)
 					else:
-						print "% 6.1f % 8.3f % 8.3f % 7.3f %7s % 8.2f % 8.2f %5.2f(% 6.3f)"%(i.freq, i.gain, i.net(),i.swr(), "n/a", i.real, i.imag, i.AGT, i.agt)
+						print "% 6.1f % 8.3f % 8.3f % 7.3f %7s % 8.2f % 8.2f %5.2f(% 6.3f)"%(i.freq, i.gain, i.horizontalNet(forward_dir),i.swr(), "n/a", i.real, i.imag, i.AGT, i.agt)
 
 		else:
 			if header: 
@@ -196,6 +202,7 @@ class NecOutputParser:
 
 class NecFileObject:
 	def __init__(self, options):
+		self.options = options
 		self.vars = {}
 		self.min_max = {}
 		self.dependent_vars = []
@@ -735,7 +742,7 @@ class NecFileObject:
 				if self.forward: 
 					lines.append("RP 0 1 1 1000 90 0 0 0")
 				else:
-					lines.append("RP 0 1 73 1000 90 0 0 %d"%self.angle_step)
+					lines.append("RP 0 1 %d 1000 90 0 0 %d"%(int(360/self.angle_step)+1, self.angle_step))
 				lines.append("XQ")
 				lines.append("EN")
 		else:
@@ -943,7 +950,7 @@ class NecFileObject:
 				nop = NOP(results[r][0], results[r][2], char_impedance, self.angle_step, frequency_data)
 				h.update(nop.horizontalPattern())
 				v.update(nop.verticalPattern())
-				nop.printFreqs(r==0, self.rear_angle)
+				nop.printFreqs(r==0, self.rear_angle, self.options.forward_dir, self.options.backward_dir)
 		else:
 			res = [];
 			for r in range(len(results)):
@@ -992,8 +999,11 @@ class OptionParser(optparse.OptionParser):
 		self.add_option("--engine-takes-cmd-args", default="auto", type="string", help="the nec engine takes command args, default=auto (which means no on windows yes otherwise). Other options are 'yes' or 'no'.")
 		self.add_option("-d", "--min-wire-distance", default=.005, type="float", help="minimum surface-to-surface distance allowed between non-connecting wires, default=%default")
 		self.add_option("--debug", default=0, type="int", help="turn on some loging")
+		self.add_option("--backward-dir", default=180, type="int", help="the reference direction (relative to --forward-dir) to which F/R and F/B are calculated")
+		self.add_option("--forward-dir", default=0, type="int", help="the forward direction")
 	def parse_args(self):
 		options, args = optparse.OptionParser.parse_args(self)
+		options.backward_dir += options.forward_dir
 		if options.input == "":
 			if len(args):
 				options.input=args[0]

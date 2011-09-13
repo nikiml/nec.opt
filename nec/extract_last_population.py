@@ -30,35 +30,26 @@ def parseLogFile(filename, np, full, number_of_lines, population_number):
 	
 	lines = lines[np:]
 	count = 1
-	while len(lines) >= np:
+	while len(lines):
 		k=[]
-		for i in range(np):
+		i = 0
+		while i < np and i < len(lines):
+			if lines[i] and lines[i][0]=='#':
+				del lines[i]
+				continue
 			ln = lines[i].split()
 			s = float(ln[0])
 			if s < scores[i]:
 				k.append((i,"%.4g"%s))
 				scores[i] = s
 				population[i] = map(floatOrNone, ln[1:])
-		lines = lines[np:]
-		if not number_of_lines or len(lines) < (number_of_lines-(not full))*np:
+			i+=1
+		lines = lines[i:]
+		if not number_of_lines or len(lines) < number_of_lines*np:
 			print "Iteration %d [%.6g:%.6g] - %d new offsprings - "%(count,min_value(scores), mean_value(scores),len(k)) + str(k).replace("'","")
 		count = count +1
 		if population_number and count == population_number:
 			break
-
-	if not full and len(lines) and not population_number:
-		k=[]
-		for i in range(len(lines)):
-			ln = lines[i].split()
-			s = float(ln[0])
-			if s < scores[i]:
-				k.append((i,"%.4g"%s))
-				scores[i] = s
-				population[i] = map(floatOrNone, ln[1:])
-		print "(*%d)Iteration %d [%.6g, %.6g] - %d new offsprings - "%(len(lines),count,min_value(scores), mean_value(scores),len(k)) + str(k).replace("'","")
-		lines = []
-	elif len(lines):
-		print "Incomplete iteration skipped"
 
 	return (vars,scores, population)
 
