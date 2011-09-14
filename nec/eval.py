@@ -14,22 +14,23 @@ class GeometryError (RuntimeError):
 		RuntimeError.__init__(self,msg)
 
 class FrequencyData:
-	def __init__(self, char_imp):
+	def __init__(self, char_impedance):
 		self.freq = 0
 		self.real = 0
 		self.imag = 0
 		self.gain = 0
-		self.char_imp = char_imp
+		self.char_impedance = char_impedance
 		self.angle = 0
 		self.AGT = 1.0
 		self.agt = 0
 		self.horizontal = {}
 		self.vertical = {}
+		self.sorted_horizontal_angles = []
 
 	def swr(self):
 		rc = necmath.sqrt( \
-			(necmath.pow(self.real-self.char_imp,2)+necmath.pow(self.imag,2)) \
-			/ (necmath.pow(self.real+self.char_imp,2)+necmath.pow(self.imag,2)) \
+			(necmath.pow(self.real-self.char_impedance,2)+necmath.pow(self.imag,2)) \
+			/ (necmath.pow(self.real+self.char_impedance,2)+necmath.pow(self.imag,2)) \
 			)
 		return (1+rc)/(1-rc)
 	def valid(self):
@@ -41,14 +42,35 @@ class FrequencyData:
 	def net(self, g = None):
 		if g is None:
 			g = self.gain
-		tmp = 4*max(self.real,.0001)*self.char_imp/(necmath.pow(self.real+self.char_imp,2)+necmath.pow(self.imag,2))
+		tmp = 4*max(self.real,.0001)*self.char_impedance/(necmath.pow(self.real+self.char_impedance,2)+necmath.pow(self.imag,2))
 		return g+10*necmath.log10(tmp)
 
 	def horizontalNet(self, phi):
-		return self.net(self.horizontal[phi])
+		return self.net(self.horizontalRaw(phi))
 
 	def horizontalRaw(self, phi):
-		return self.horizontal[phi]
+		if phi in self.horizontal: return self.horizontal[phi]
+		#sys.stderr.write("WARNING: gain for angle %.1f not calculated - using approximation\n"%phi)
+		if not self.sorted_horizontal_angles:
+			self.sorted_horizontal_angles = sorted(self.horizontal.keys())
+		if not self.sorted_horizontal_angles:
+			raise RuntimeError("gain not calculated")
+		diff = phi-self.sorted_horizontal_angles[0]
+		index = 0
+		for i in range(1,len(self.sorted_horizontal_angles)):
+			d = phi-self.sorted_horizontal_angles[i]
+			if abs(d) < abs(diff):
+				diff = d
+				index = i
+		if index !=0 and diff < 0:
+			return (self.horizontal[self.sorted_horizontal_angles[index-1]]*(phi - self.sorted_horizontal_angles[index-1])		\
+					+ self.horizontal[self.sorted_horizontal_angles[index]]*( self.sorted_horizontal_angles[index] - phi) )	\
+					/ (self.sorted_horizontal_angles[index]-self.sorted_horizontal_angles[index-1])
+		if index !=len(self.sorted_horizontal_angles)-1 and diff > 0:
+			return (self.horizontal[self.sorted_horizontal_angles[index+1]]*(self.sorted_horizontal_angles[index+1]-phi)		\
+					+ self.horizontal[self.sorted_horizontal_angles[index]]*(phi - self.sorted_horizontal_angles[index]) )	\
+					/ (self.sorted_horizontal_angles[index+1]-self.sorted_horizontal_angles[index])
+		return self.horizontal[self.sorted_horizontal_angles[index]]
 
 	def verticalNet(self, theta):
 		return self.net(self.vertical[theta])
@@ -62,9 +84,11 @@ class FrequencyData:
 	def forwardRaw(self, forward_dir = 0):
 		return self.horizontalRaw(forward_dir)
 
-	def backwardGain(self):
-		angles = sorted(elf.horizontal.keys())
-		return self.horizontalNet(angles[len(angles)/2])
+	def backwardGain(self, backward_dir = 0):
+		return self.horizontalNet(backward_dir)
+
+	def backwardRaw(self, backward_dir = 0):
+		return self.horizontalRaw(backward_dir)
 
 	def rearGain(self, rear_angle, backward_dir = 180):
 		rear = [self.horizontalNet(phi) for phi in self.horizontal.keys() if phi>=backward_dir-rear_angle/2. and  phi<=backward_dir+rear_angle/2.]
@@ -76,33 +100,34 @@ class FrequencyData:
 
 
 class NecOutputParser:
-	def __init__(self, output, agt=1, char_imp = 300, angle_step = 5, frequency_angle_data={}, omni=0):
+	def __init__(self, output, agt, options):
 		self.frequencies = []
-		self.char_imp = char_imp
-		self.frequency_angle_data=frequency_angle_data
-		self.angle_step = angle_step
 		self.AGT = agt
 		self.agt = 10*necmath.log10(agt)
-		self.omni = omni
+		self.options = options
 		if output:
 			self.parse(output)
 
-	def printFreqs(self, header=1, rear_angle=120, forward_dir = 0, backward_dir = 180):
-		if not self.frequency_angle_data:
+	def printFreqs(self, header=1):
+		if not self.options.frequency_data:
 			if header: 
-				print "%6s %8s %8s %7s %7s %8s %8s %12s"%("Freq", "RawGain", "NetGain", "SWR", "F/R", "Real", "Imag", "AGT(corr)")
-				print "========================================================================="
+				print "%6s %8s %8s %7s %7s %7s %8s %8s %12s"%("Freq", "RawGain", "NetGain", "SWR", "F/R", "F/B", "Real", "Imag", "AGT(corr)")
+				print "=================================================================================="
 			#if self.agt!=0:
 			#	print "AGT=%g dB"%self.agt
 			for i in self.frequencies:
 				if not i.valid():
 					print "%6.1f - invalid result"%i.freq
 				else:
-					rear = i.rearGain(rear_angle,backward_dir)
-					if rear is not None:
-						print "% 6.1f % 8.3f % 8.3f % 7.3f % 7.3f % 8.2f % 8.2f %5.2f(% 6.3f)"%(i.freq, i.gain, i.horizontalNet(forward_dir),i.swr(), i.net()-rear, i.real, i.imag, i.AGT, i.agt)
-					else:
-						print "% 6.1f % 8.3f % 8.3f % 7.3f %7s % 8.2f % 8.2f %5.2f(% 6.3f)"%(i.freq, i.gain, i.horizontalNet(forward_dir),i.swr(), "n/a", i.real, i.imag, i.AGT, i.agt)
+					rear = i.rearGain(self.options.rear_angle,self.options.backward_dir)
+					back = i.backwardGain(self.options.backward_dir)
+					if rear is None: rear = "n/a"
+					else: rear = "% 7.3f"%(i.net()-rear)
+					if back is None: back = "n/a"
+					else: back = "% 7.3f"%(i.net()-back)
+
+					print "% 6.1f % 8.3f % 8.3f % 7.3f % 7s % 7s % 8.2f % 8.2f %5.2f(% 6.3f)"%	\
+							(i.freq, i.gain, i.horizontalNet(self.options.forward_dir),i.swr(), rear, back, i.real, i.imag, i.AGT, i.agt)
 
 		else:
 			if header: 
@@ -112,7 +137,7 @@ class NecOutputParser:
 				if not i.valid():
 					print "%6.4g - invalid result"%i.freq
 				else:
-					target = self.frequency_angle_data[i.freq][1]
+					target = self.options.frequency_data[i.freq][1]
 					print "% 6.1f % 7.2f % 6.1f % 8.3f % 8.3f % 7.3f % 8.2f % 8.2f % 7.3f %5.2f(% 6.3f)"%(i.freq, target, i.angle, i.gain, i.net(),i.swr(), i.real, i.imag, target-i.net(), i.AGT, i.agt)
 	def getGainSWRChartData(self):
 		res = []
@@ -149,7 +174,7 @@ class NecOutputParser:
 				i = i+2
 				freq = float(lines[i].strip()[10:-4])
 #				if not len(self.frequencies) or self.frequencies[-1].valid():
-#					self.frequencies.append(FrequencyData(self.char_imp))
+#					self.frequencies.append(FrequencyData(self.char_impedance))
 #				self.frequencies[-1].freq = freq
 			elif ln == "- - - ANTENNA INPUT PARAMETERS - - -":
 				i=i+4
@@ -159,19 +184,19 @@ class NecOutputParser:
 				imag = float(lines[i][72:84])
 #				self.frequencies[-1].real = float(lines[i][60:72])
 #				self.frequencies[-1].imag = float(lines[i][72:84])
-				fd = FrequencyData(self.char_imp)
+				fd = FrequencyData(self.options.char_impedance)
 				fd.real = real
 				fd.imag = imag
 				self.frequencies.append(fd)
 				fd.freq = freq
-			elif ln =="- - - RADIATION PATTERNS - - -":
-				i=i+5
-				angle = 0
-#				freq = self.frequencies[-1].freq
-				if freq in self.frequency_angle_data.keys():
-					angle = self.frequency_angle_data[freq][0]
 				fd.AGT = self.AGT
 				fd.agt = self.agt
+			elif ln =="- - - RADIATION PATTERNS - - -":
+				i=i+5
+				angle = self.options.forward_dir
+#				freq = self.frequencies[-1].freq
+				if freq in self.options.frequency_data.keys():
+					angle = self.options.frequency_data[freq][0]
 				while len(lines[i].strip()):
 					ln = lines[i]
 					if ln[0]=="*" or len(ln) < 8 :break
@@ -186,17 +211,17 @@ class NecOutputParser:
 							fd.horizontal[phi]=gain
 						if phi == 0:
 							fd.vertical[theta]=gain
-						if theta==90 and (abs(phi-angle)<=self.angle_step*.5) or theta==-90 and (abs(phi-180-angle)<=self.angle_step*.5):
+						if theta==90 and (abs(phi-angle)<=self.options.angle_step*.5) or theta==-90 and (abs(phi-180-angle)<=self.options.angle_step*.5):
 							fd.gain = gain
 							fd.angle = angle
 						i = i+1
 					except:
 						break
 			i = i+1
-		if self.frequency_angle_data:
+		if self.options.frequency_data:
 			freqs = []
 			for f in self.frequencies:
-				if f.freq in self.frequency_angle_data.keys():
+				if f.freq in self.options.frequency_data.keys():
 					freqs.append(f)
 			self.frequencies = freqs
 
@@ -212,45 +237,26 @@ class NecFileObject:
 		self.source_tags={}
 		self.autosegment=(0,0)
 		self.frequency = 585
-		self.output = options.output
-		self.engine = options.engine
-		self.sourcefile = options.input
 		self.scale = 1
-		self.angle_step = 5
-		self.agt_correction= options.agt_correction
-		self.min_wire_distance = options.min_wire_distance
-		self.forward = options.forward
-		self.rear_angle = options.rear_angle
-		self.calc_gain=1
-		self.engine_takes_cmd_args = 0
+		self.options.angle_step = 5
 		if options.engine_takes_cmd_args=='yes' or options.engine_takes_cmd_args=='auto' and os.name!='nt':
-			self.engine_takes_cmd_args = 1
+			self.options.engine_takes_cmd_args = 1
+		else: self.options.engine_takes_cmd_args = 0
 		try:self.write_js_model = options.js_model
 		except AttributeError: self.write_js_model=0
-		try:
-			self.debug = options.debug
-		except AttributeError:
-			self.debug = 0
-		try:
-			self.quiet = options.quiet
-		except AttributeError:
-			self.quiet = False
-		try:
-			self.verbose = options.verbose
-		except AttributeError:
-			self.verbose = True
-		if self.sourcefile:
-			self.readSource(self.sourcefile)
+		if self.options.input:
+			self.readSource(self.options.input)
 			try:
-				if options.param_values_file:
-					self.parseParameterValues(options.param_values_file)
+				if self.options.param_values_file:
+					self.parseParameterValues(self.options.param_values_file)
 					self.writeParametrized("output.nec")
 			except AttributeError:
 				pass
+		self.autoSegmentation(self.options.auto_segmentation)
 
 	def readSource(self, sourcefile):
-		if self.debug: sys.stderr.write("debug: Opening file %s\n"%sourcefile)
-		self.sourcefile = sourcefile
+		if self.options.debug: sys.stderr.write("debug: Opening file %s\n"%sourcefile)
+		self.options.input = sourcefile
 		file = open(sourcefile, "rt")
 		try: self.lines = file.readlines()
 		finally: file.close()
@@ -258,7 +264,7 @@ class NecFileObject:
 		self.parse()
 	
 	def parse(self):		
-		if self.debug: sys.stderr.write("debug: Parsing input\n")
+		if self.options.debug: sys.stderr.write("debug: Parsing input\n")
 		self.vars = {}
 		self.dependent_vars = []
 		self.varlines=[]
@@ -274,13 +280,13 @@ class NecFileObject:
 				comment = ""
 				ln = ln.strip()
 			if ln[0:2]== "SY":
-				if self.debug >1: sys.stderr.write("debug: \tParsing line: \"%s\"\n"%ln)
+				if self.options.debug >1: sys.stderr.write("debug: \tParsing line: \"%s\"\n"%ln)
 				try:
 					d = {}
 					exec(ln[3:].strip(), {}, d)
-					if self.debug: 
+					if self.options.debug: 
 						sys.stderr.write("debug: \tAdded independent parameter \"%s\"\n"%d.keys()[0])
-						if self.debug>1: sys.stderr.write("debug: \t\tFull comment = \"%s\"\n"%comment)
+						if self.options.debug>1: sys.stderr.write("debug: \t\tFull comment = \"%s\"\n"%comment)
 					self.vars.update(d)
 					self.paramlines[d.keys()[0]]=i
 					try:
@@ -288,16 +294,16 @@ class NecFileObject:
 						comment_pos = comment.find("'")
 						if comment_pos!=-1:
 							comment = comment[0:comment_pos].strip()
-						if self.debug>1: 
+						if self.options.debug>1: 
 							sys.stderr.write("debug: \t\tLimits comment = \"%s\"\n"%comment)
 						min, max = eval(comment)
 						self.min_max[d.keys()[0]]=(float(min),float(max))
-						if self.debug: sys.stderr.write("debug: \t\tlimits(%.3g, %.3g)\n"%(float(min), float(max)))
+						if self.options.debug: sys.stderr.write("debug: \t\tlimits(%.3g, %.3g)\n"%(float(min), float(max)))
 					except:
-						if self.debug>1: sys.stderr.write("debug: \tNo limits found for parameter \"%s\"\n"%d.keys()[0])
+						if self.options.debug>1: sys.stderr.write("debug: \tNo limits found for parameter \"%s\"\n"%d.keys()[0])
 						pass
 				except:
-					if self.debug: sys.stderr.write("debug: \tAdded dependent parameter \"%s\"\n"%ln[3:].strip())
+					if self.options.debug: sys.stderr.write("debug: \tAdded dependent parameter \"%s\"\n"%ln[3:].strip())
 					self.dependent_vars.append(ln[3:].strip())
 			else:
 				self.varlines.append(ln.replace(',',' ').split())
@@ -309,7 +315,7 @@ class NecFileObject:
 				elif ln[0:2] == "GS":
 					self.scale = float(self.varlines[-1][3])
 				elif ln[0:2] == "RP":
-					self.angle_step = float(self.varlines[-1][8])
+					self.options.angle_step = float(self.varlines[-1][8])
 
 		for i in self.vars.keys():
 			self.vars[i]=float(self.vars[i])
@@ -423,7 +429,7 @@ class NecFileObject:
 			pr = v3add(line1[0],v3mul(d, v1))
 			pr = v3sub(line2[1],pr)
 			pr = v3len(pr)
-			if pr>r1+r2+self.min_wire_distance:
+			if pr>r1+r2+self.options.min_wire_distance:
 				return 1
 
 			zerocount = 0
@@ -470,7 +476,7 @@ class NecFileObject:
 		#print "s  = [%f, %f, %f]"%tuple(s)
 		d = v3dot(n, s)
 		#print "plane line distance = %f"%d
-		if abs(d) > r1+r2 + self.min_wire_distance: #infinite lines are far enough
+		if abs(d) > r1+r2 + self.options.min_wire_distance: #infinite lines are far enough
 			return 1
 
 		m = v3mul(d, n)
@@ -716,12 +722,13 @@ class NecFileObject:
 					file.write("CE\n")
 			file.write("\n".join(lines)+"\n")
 		finally: file.close()
-	def freqSweepLines(self, nec_input_lines, sweep, frequency_data):
+	def freqSweepLines(self, nec_input_lines, sweep):
 		lines = list(nec_input_lines)
 		#lines.append("FR 0 1 0 0 %g 0"%sweep[0])
 		#lines.append("XQ")
 		lines.append("FR 0 %d 0 0 %g %g"%(sweep[2],sweep[0],sweep[1]))
-		if self.calc_gain:
+		frequency_data = self.options.frequency_data
+		if self.options.calc.gain:
 			if frequency_data:
 				del lines[-1]
 				in_sweep = 0
@@ -739,10 +746,10 @@ class NecFileObject:
 				lines.append("XQ")
 				return lines
 			else:
-				if self.forward: 
+				if self.options.forward: 
 					lines.append("RP 0 1 1 1000 90 0 0 0")
 				else:
-					lines.append("RP 0 1 %d 1000 90 0 0 %d"%(int(360/self.angle_step)+1, self.angle_step))
+					lines.append("RP 0 1 %d 1000 90 0 0 %g"%(int(360/self.options.angle_step)+1, self.options.angle_step))
 				lines.append("XQ")
 				lines.append("EN")
 		else:
@@ -761,30 +768,35 @@ class NecFileObject:
 		#lines.append("XQ")
 		#print "agt freq=%g"%(sweep[0]+(sweep[2]-1)*.5*sweep[1])
 		lines.append("FR 0 0 0 0 %g 0"%(sweep[0]+(sweep[2]-1)*.5*sweep[1]))
-		lines.append("RP 0 37 73 1001 -180 0 5 5")
+		step = self.options.angle_step
+		if step < 5 and self.options.forward:
+			step = 5
+		hcount = int(360/step)+1
+		vcount = int(180/step)+1
+		lines.append("RP 0 %d %d 1001 -180 0  %g %g"%(vcount, hcount, step, step))
 		lines.append("XQ")
 		lines.append("EN")
 		return lines
 	
-	def runSweep(self, nec_input_lines, sweep, frequency_data, get_agt_scores=0, use_agt = None):
+	def runSweep(self, nec_input_lines, sweep, get_agt_scores=0, use_agt = None):
 		#print "Get agt score = %d"%get_agt_scores
 		import tempfile as tmp
 		import subprocess as sp
 		import os
 		try:
-			os.mkdir(self.output)
+			os.mkdir(self.options.output)
 		except: pass
-		f, nec_input = tmp.mkstemp(".inp", "nec2", os.path.join(".",self.output) ,1)
+		f, nec_input = tmp.mkstemp(".inp", "nec2", os.path.join(".",self.options.output) ,1)
 		os.close(f)
 		agt_input = nec_input[0:-3]+"agt"
 
 		file = open(nec_input, "wt")
-		fslines = self.freqSweepLines(nec_input_lines,sweep, frequency_data)
+		fslines = self.freqSweepLines(nec_input_lines,sweep)
 		if not fslines:
 			return ()
 		try: file.write("\n".join(fslines))
 		finally: file.close()
-		if (self.agt_correction or get_agt_scores) and (use_agt is None):
+		if (self.options.agt_correction or get_agt_scores) and (use_agt is None):
 			file = open(agt_input, "wt")
 			try: file.write("\n".join(self.agtLines(nec_input_lines,sweep)))
 			finally: file.close()
@@ -794,9 +806,9 @@ class NecFileObject:
 		agt = 1.0
 		if use_agt is not None:
 			agt = use_agt
-		elif self.agt_correction or get_agt_scores :
-			if self.engine_takes_cmd_args:
-				popen = sp.Popen([self.engine, agt_input, nec_output] )
+		elif self.options.agt_correction or get_agt_scores :
+			if self.options.engine_takes_cmd_args:
+				popen = sp.Popen([self.options.engine, agt_input, nec_output] )
 				popen.wait()
 			else:
 				try:
@@ -807,7 +819,7 @@ class NecFileObject:
 					f.write("\n")
 					f.close()
 					f = open(exe_input)
-					popen = sp.Popen(self.engine, stdin=f, stdout=open(os.devnull))
+					popen = sp.Popen(self.options.engine, stdin=f, stdout=open(os.devnull))
 					popen.wait()
 				finally:
 					f.close()
@@ -815,8 +827,8 @@ class NecFileObject:
 			if get_agt_scores:
 				return (nec_output,agt)
 			#print "sweep (%g,%d,%g) - AGT=%g (%g)"%(sweep[0],sweep[1],sweep[2],agt,10*math.log10(agt))
-		if self.engine_takes_cmd_args:
-			popen = sp.Popen([self.engine, nec_input, nec_output] )
+		if self.options.engine_takes_cmd_args:
+			popen = sp.Popen([self.options.engine, nec_input, nec_output] )
 			popen.wait()
 		else:
 			try:
@@ -827,18 +839,18 @@ class NecFileObject:
 				f.write("\n")
 				f.close()
 				f = open(exe_input)
-				popen = sp.Popen(self.engine, stdin=f, stdout=open(os.devnull))
+				popen = sp.Popen(self.options.engine, stdin=f, stdout=open(os.devnull))
 				popen.wait()
 			finally:
 				f.close()
 		return (nec_output,agt)
 		
-	def runSweepT(self, nec_input_lines, sweep, frequency_data, number, result_map, result_lock, id, get_agt_scores=0, use_agt = None ):
+	def runSweepT(self, nec_input_lines, sweep, number, result_map, result_lock, id, get_agt_scores=0, use_agt = None ):
 		try:
 			ua = None
 			if use_agt and number in use_agt:
 				ua = use_agt[number]
-			r = self.runSweep(nec_input_lines,sweep, frequency_data,get_agt_scores,ua)
+			r = self.runSweep(nec_input_lines,sweep, get_agt_scores,ua)
 		except:
 			try:
 				result_lock.acquire()
@@ -852,15 +864,15 @@ class NecFileObject:
 			if r : result_map[number]=(r[0],id,r[1], number)
 		finally: result_lock.release()
 
-	def runSweeps(self, sweeps, frequency_data, num_cores=1, cleanup=0, get_agt_scores = 0, use_agt = None):
+	def runSweeps(self, sweeps, cleanup=0, get_agt_scores = 0, use_agt = None):
 		if cleanup:
 			import os, time, stat
 			try:
-				ldir = os.listdir(self.output)
+				ldir = os.listdir(self.options.output)
 				n = time.time()
 				for f in ldir:
 					try:
-						f = os.path.join(self.output,f)
+						f = os.path.join(self.options.output,f)
 						s = os.stat(f)
 						if s[stat.ST_MTIME] + 180 < n:
 							os.remove(f)
@@ -870,6 +882,7 @@ class NecFileObject:
 				pass
 
 		total_freqs = 0
+		num_cores = self.options.num_cores
 		for i in sweeps:
 			total_freqs = total_freqs+i[2]
 		if total_freqs < num_cores : 
@@ -905,7 +918,7 @@ class NecFileObject:
 		try:
 			nec_input_lines = self.necInputLines()
 		except:
-			if self.verbose: traceback.print_exc()
+			if self.options.verbose: traceback.print_exc()
 			return
 
 		from threading import Lock, Thread
@@ -920,7 +933,7 @@ class NecFileObject:
 				s = [sweep[0]+j*fps*sweep[1],sweep[1],fps]
 				if j==ncores-1:
 					s = [sweep[0]+j*fps*sweep[1],sweep[1],sweep[2]-j*fps]
-				threads.append(Thread(target=self.runSweepT, args=(nec_input_lines, s, frequency_data, number,results, result_lock,i,get_agt_scores,use_agt )))
+				threads.append(Thread(target=self.runSweepT, args=(nec_input_lines, s, number,results, result_lock,i,get_agt_scores,use_agt )))
 				threads[-1].start()
 				number = number+1
 
@@ -932,14 +945,14 @@ class NecFileObject:
 			r.append(results[i])
 		return r
 
-	def evaluate(self, sweeps, char_impedance, num_cores=1, cleanup=0, frequency_data = {}, chart_like=0):
+	def evaluate(self, cleanup=0, chart_like=0):
 		NOP = NecOutputParser 
-		results = self.runSweeps(sorted(sweeps), frequency_data, num_cores, cleanup) #[[174,6,8],[470,6,40]]
+		results = self.runSweeps(sorted(self.options.sweeps), cleanup) #[[174,6,8],[470,6,40]]
 		h={}
 		v={}
 		if not chart_like:
-			print "Input file : %s"%self.sourcefile 
-			print "Freq sweeps: %s"%str(sweeps)
+			print "Input file : %s"%self.options.input 
+			print "Freq sweeps: %s"%str(self.options.sweeps)
 			if self.autosegment[0]:
 				print "Autosegmentation: %d per %g"%self.autosegment
 			else:
@@ -947,21 +960,21 @@ class NecFileObject:
 			print "\n"
 	
 			for r in range(len(results)):
-				nop = NOP(results[r][0], results[r][2], char_impedance, self.angle_step, frequency_data)
+				nop = NOP(results[r][0], results[r][2], self.options)
 				h.update(nop.horizontalPattern())
 				v.update(nop.verticalPattern())
-				nop.printFreqs(r==0, self.rear_angle, self.options.forward_dir, self.options.backward_dir)
+				nop.printFreqs(r==0)
 		else:
 			res = [];
 			for r in range(len(results)):
-				nop = NOP(results[r][0], results[r][2], char_impedance, self.angle_step, frequency_data)
+				nop = NOP(results[r][0], results[r][2], self.options)
 				h.update(nop.horizontalPattern())
 				v.update(nop.verticalPattern())
 				res = res+nop.getGainSWRChartData()
 			res.sort()
-			g = self.sourcefile+"_gain"
+			g = self.options.input+"_gain"
 			for i in res: g+=(",%.2f"%i[1])
-			s = self.sourcefile+"_swr"
+			s = self.options.input+"_swr"
 			for i in res: s+=(",%.2f"%i[2])
 			print g
 			print s
@@ -1022,13 +1035,20 @@ def optionParser():
 			self.add_option("--agt-correction", default=1, type="int", help="set to 0 to disable agt correction. It is faster but less accurate.")
 			self.add_option("-c", "--centers", default=True, help="run sweep on the channel centers",action="store_false", dest="ends")
 			self.add_option("-f", "--frequency_data", default = "{}", help="a map of frequency to (angle, expected_gain) tuple" )
-			self.add_option("--forward", default=0, action="store_true", help="only forward gain is calculated")
 			self.add_option("--chart", default=0, action="store_true")
 			self.add_option("--js-model", default=0, action="store_true", help="write jsmodel")
 			self.add_option("--cleanup", default=0, action="store_true", help="remove output")
 			self.add_option("--rear-angle", default=120, type="int", help="angle for calculating rear gain (max 270)")
 		def parse_args(self):
 			options, args = OptionParser.parse_args(self)
+			class Calc: pass
+			options.calc = Calc()
+			options.calc.gain=1
+			options.calc.f2b=1
+			options.calc.f2r=1
+			options.quiet=0
+			options.forward = 0
+			options.verbose=0
 			options.frequency_data = eval(options.frequency_data)
 			if options.rear_angle<0 or options.rear_angle>270: raise ValueError("Invalid rear angle of %d"%options.rear_angle)
 			if not options.sweeps:
@@ -1043,8 +1063,7 @@ def optionParser():
 
 def run(options):
 	nf = NecFileObject(options)
-	nf.autoSegmentation(options.auto_segmentation)
-	nf.evaluate(options.sweeps, options.char_impedance, options.num_cores, options.cleanup, options.frequency_data,options.chart)
+	nf.evaluate(options.cleanup, options.chart)
 
 def main():
 #default values
