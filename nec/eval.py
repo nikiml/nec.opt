@@ -51,6 +51,7 @@ class FrequencyData:
 	def horizontalRaw(self, phi):
 		if phi in self.horizontal: return self.horizontal[phi]
 		#sys.stderr.write("WARNING: gain for angle %.1f not calculated - using approximation\n"%phi)
+		#sys.stderr.write(str(self.horizontal)+"\n")
 		if not self.sorted_horizontal_angles:
 			self.sorted_horizontal_angles = sorted(self.horizontal.keys())
 		if not self.sorted_horizontal_angles:
@@ -119,15 +120,24 @@ class NecOutputParser:
 				if not i.valid():
 					print "%6.1f - invalid result"%i.freq
 				else:
-					rear = i.rearGain(self.options.rear_angle,self.options.backward_dir)
-					back = i.backwardGain(self.options.backward_dir)
-					if rear is None: rear = "n/a"
-					else: rear = "% 7.3f"%(i.net()-rear)
-					if back is None: back = "n/a"
-					else: back = "% 7.3f"%(i.net()-back)
+					rear = "n/a"
+					back = "n/a"
+					raw = "n/a"
+					net = "n/a"
+					if self.options.calc.gain:
+						raw = i.horizontalRaw(self.options.forward_dir)
+						net = i.net(raw)
+						if self.options.calc.f2r:
+							rear = i.rearGain(self.options.rear_angle,self.options.backward_dir)
+							rear = "% 7.3f"%(net-rear)
+						if self.options.calc.f2r:
+							back = i.backwardGain(self.options.backward_dir)
+							back = "% 7.3f"%(net-back)
+						raw = "% 8.3f"%raw
+						net = "% 8.3f"%net
 
-					print "% 6.1f % 8.3f % 8.3f % 7.3f % 7s % 7s % 8.2f % 8.2f %5.2f(% 6.3f)"%	\
-							(i.freq, i.gain, i.horizontalNet(self.options.forward_dir),i.swr(), rear, back, i.real, i.imag, i.AGT, i.agt)
+					print "% 6.1f % 8s % 8s % 7.3f % 7s % 7s % 8.2f % 8.2f %5.2f(% 6.3f)"%	\
+							(i.freq, raw, net,i.swr(), rear, back, i.real, i.imag, i.AGT, i.agt)
 
 		else:
 			if header: 
@@ -201,9 +211,13 @@ class NecOutputParser:
 					ln = lines[i]
 					if ln[0]=="*" or len(ln) < 8 :break
 					try:
-						theta = float(ln[0:8])
-						phi = float(ln[8:17])
-						gain = float(ln[28:36])-self.agt
+						#theta = float(ln[0:8])
+						#phi = float(ln[8:17])
+						#gain = float(ln[28:36])-self.agt
+						ln = ln.split()
+						theta = float(ln[0])
+						phi = float(ln[1])
+						gain = float(ln[2+self.options.gain_type])-self.agt
 						if theta < 0 : 
 							theta = -theta
 							phi = (phi+540)%360
@@ -961,6 +975,9 @@ class NecFileObject:
 	
 			for r in range(len(results)):
 				nop = NOP(results[r][0], results[r][2], self.options)
+				if self.options.debug > 1:
+					for f in nop.frequencies:
+						print f.horizontal
 				h.update(nop.horizontalPattern())
 				v.update(nop.verticalPattern())
 				nop.printFreqs(r==0)
@@ -1012,17 +1029,29 @@ class OptionParser(optparse.OptionParser):
 		self.add_option("--engine-takes-cmd-args", default="auto", type="string", help="the nec engine takes command args, default=auto (which means no on windows yes otherwise). Other options are 'yes' or 'no'.")
 		self.add_option("-d", "--min-wire-distance", default=.005, type="float", help="minimum surface-to-surface distance allowed between non-connecting wires, default=%default")
 		self.add_option("--debug", default=0, type="int", help="turn on some loging")
-		self.add_option("--backward-dir", default=180, type="int", help="the reference direction (relative to --forward-dir) to which F/R and F/B are calculated")
-		self.add_option("--forward-dir", default=0, type="int", help="the forward direction")
+		self.add_option("--backward-dir", default=180, type="int", help="the backward direction (relative to --forward-dir) to which F/R and F/B are calculated. The default is 180 which means the exact opposite of the forward-dir")
+		self.add_option("--forward-dir", default=0, type="int", help="the forward direction, by default is 0 which means the antenna forward is along X.")
+		self.set_defaults(gain_type=1)
+		self.add_option("--vertical-gain", action="store_const", const=0, dest="gain_type", help="calculate horizontal gain [default]")
+		self.add_option("--horizontal-gain", action="store_const", const=1, dest="gain_type", help="calculate vertical gain")
+		self.add_option("--total-gain", action="store_const", const=2, dest="gain_type", help="calculate total gain")
 	def parse_args(self):
 		options, args = optparse.OptionParser.parse_args(self)
-		options.backward_dir += options.forward_dir
 		if options.input == "":
 			if len(args):
 				options.input=args[0]
 				del args[0]
 			else:
 				options.input = input
+		while options.forward_dir < 0:
+			options.forward_dir+=360
+		while options.forward_dir > 360:
+			options.forward_dir-=360
+		options.backward_dir += options.forward_dir
+		while options.backward_dir < 0:
+			options.backward_dir+=360
+		while options.backward_dir > 360:
+			options.backward_dir-=360
 		if options.sweeps:
 			options.sweeps = map(eval,options.sweeps)
 		return (options, args)
