@@ -220,7 +220,8 @@ class NecOutputParser:
 						gain = float(ln[2+self.options.gain_type])-self.agt
 						if theta < 0 : 
 							theta = -theta
-							phi = (phi+540)%360
+							phi = (phi+540)
+						phi = phi%360
 						if abs(theta)==90 :
 							fd.horizontal[phi]=gain
 						if phi == 0:
@@ -761,9 +762,9 @@ class NecFileObject:
 				return lines
 			else:
 				if self.options.forward: 
-					lines.append("RP 0 1 1 1000 90 0 0 0")
+					lines.append("RP 0 1 1 1000 90 %g 0 0"%self.options.forward_dir)
 				else:
-					lines.append("RP 0 1 %d 1000 90 0 0 %g"%(int(360/self.options.angle_step)+1, self.options.angle_step))
+					lines.append("RP 0 1 %d 1000 90 %g 0 %g"%(int(360/self.options.angle_step)+1, self.options.forward_dir, self.options.angle_step))
 				lines.append("XQ")
 				lines.append("EN")
 		else:
@@ -787,7 +788,8 @@ class NecFileObject:
 			step = 5
 		hcount = int(360/step)+1
 		vcount = int(180/step)+1
-		lines.append("RP 0 %d %d 1001 -180 0  %g %g"%(vcount, hcount, step, step))
+		#lines.append("RP 0 %d %d 1001 -180 0  %g %g"%(vcount, hcount, step, step))
+		lines.append("RP 0 %d %d 1001 -180 %g  %g %g"%(vcount, hcount, self.options.forward_dir, step, step))
 		lines.append("XQ")
 		lines.append("EN")
 		return lines
