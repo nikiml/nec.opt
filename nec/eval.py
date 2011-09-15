@@ -130,7 +130,7 @@ class NecOutputParser:
 						if self.options.calc.f2r:
 							rear = i.rearGain(self.options.rear_angle,self.options.backward_dir)
 							rear = "% 7.3f"%(net-rear)
-						if self.options.calc.f2r:
+						if self.options.calc.f2b:
 							back = i.backwardGain(self.options.backward_dir)
 							back = "% 7.3f"%(net-back)
 						raw = "% 8.3f"%raw
