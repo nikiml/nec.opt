@@ -527,9 +527,9 @@ def optionsParser():
 			self.add_option("-p", "--parameters", default = "", help="If not empty restrict the list of optimization parameters to this list." )
 			self.add_option("-r", "--restart", default = "", metavar="RESTART_FILE", help="restart from population saved in a file." )
 			self.add_option("--omni", default=0, action="store_true", help="parse all horizontal angles")
-			self.add_option("--quiet", default=False, action="store_true")
-			self.add_option("--verbose", default=False, action="store_true")
-			self.add_option("--strict-max-target", default=False, action="store_true")
+			self.add_option("--quiet", default=False, action="store_true", help="diable all output but errors")
+			self.add_option("--verbose", default=False, action="store_true", help="enables extra output")
+			self.add_option("--strict-max-target", default=False, action="store_true", help="use if your taget function has no averaging i.e. if the result for a single frequency can be used to declare a model as worse in comperison with the score of another model. The default target function max(max_swr_diff,max_gain_diff) is an example of such function. Setting this option will speed up the optimization, but it has to be used correctly.")
 
 			
 		def parse_args(self):
