@@ -46,7 +46,11 @@ def parseLogFile(filename, np, full, number_of_lines, population_number):
 			i+=1
 		lines = lines[i:]
 		if not number_of_lines or len(lines) < number_of_lines*np:
-			print "Iteration %d [%.6g:%.6g] - %d new offsprings - "%(count,min_value(scores), mean_value(scores),len(k)) + str(k).replace("'","")
+			if i==np:
+				print "Iteration %d [%.6g:%.6g] - %d new offsprings - "%(count,min_value(scores), mean_value(scores),len(k)) + str(k).replace("'","")
+			elif not full:
+				print "(*%d)Iteration %d [%.6g, %.6g] - %d new offsprings - "%(i,count,min_value(scores), mean_value(scores),len(k)) + str(k).replace("'","")
+				
 		count = count +1
 		if population_number and count == population_number:
 			break

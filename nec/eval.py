@@ -1,7 +1,7 @@
 # Copyright 2010 Nikolay Mladenov, Distributed under 
 # GNU General Public License
 
-import necmath,sys, traceback, os
+import necmath,sys, traceback, os, pprint
 from demathutils import v3add, v3mul, v3sub, v3dot, v3cross, v3len, v3unit, v3rotx, v3roty, v3rotz
 
 output = "output"
@@ -12,6 +12,18 @@ ncores=4
 class GeometryError (RuntimeError):
 	def __init__(self, msg):
 		RuntimeError.__init__(self,msg)
+
+class Sweep:
+	def __init__(self, ranges, angles, agt_freq,sweepid):
+		self.ranges = ranges
+		self.angles = angles
+		self.agt_freq = agt_freq
+		self.sweepid = sweepid
+	def __str__(self):
+		return "{"+str(self.ranges)+", agt freq "+str(self.agt_freq)+"}"
+	def __repr__(self):
+		return "{"+str(self.ranges)+", agt freq "+str(self.agt_freq)+"}"
+
 
 class FrequencyData:
 	def __init__(self, char_impedance):
@@ -201,6 +213,7 @@ class NecOutputParser:
 				fd.freq = freq
 				fd.AGT = self.AGT
 				fd.agt = self.agt
+
 			elif ln =="- - - RADIATION PATTERNS - - -":
 				i=i+5
 				angle = self.options.forward_dir
@@ -268,6 +281,10 @@ class NecFileObject:
 			except AttributeError:
 				pass
 		self.autoSegmentation(self.options.auto_segmentation)
+		self.prepareSweeps()
+		if self.options.debug:
+			print "Engine jobs:"
+			pprint.pprint(self.sweeps)
 
 	def readSource(self, sourcefile):
 		if self.options.debug: sys.stderr.write("debug: Opening file %s\n"%sourcefile)
@@ -312,7 +329,10 @@ class NecFileObject:
 						if self.options.debug>1: 
 							sys.stderr.write("debug: \t\tLimits comment = \"%s\"\n"%comment)
 						min, max = eval(comment)
-						self.min_max[d.keys()[0]]=(float(min),float(max))
+						if min <= max:
+							self.min_max[d.keys()[0]]=(float(min),float(max))
+						else:
+							self.min_max[d.keys()[0]]=(float(max),float(min))
 						if self.options.debug: sys.stderr.write("debug: \t\tlimits(%.3g, %.3g)\n"%(float(min), float(max)))
 					except:
 						if self.options.debug>1: sys.stderr.write("debug: \tNo limits found for parameter \"%s\"\n"%d.keys()[0])
@@ -737,41 +757,26 @@ class NecFileObject:
 					file.write("CE\n")
 			file.write("\n".join(lines)+"\n")
 		finally: file.close()
+
 	def freqSweepLines(self, nec_input_lines, sweep):
 		lines = list(nec_input_lines)
-		#lines.append("FR 0 1 0 0 %g 0"%sweep[0])
-		#lines.append("XQ")
-		lines.append("FR 0 %d 0 0 %g %g"%(sweep[2],sweep[0],sweep[1]))
+		ranges = sweep.ranges
+		angles = sweep.angles
 		frequency_data = self.options.frequency_data
+		angle_sweep = not self.options.frequency_data and not self.options.forward
 		if self.options.calc.gain:
-			if frequency_data:
-				del lines[-1]
-				in_sweep = 0
-				for freq in sorted(frequency_data.keys()):
-					if freq>=sweep[0] and freq<=sweep[0]+sweep[1]*sweep[2]:
-						#if not in_sweep:
-						#	lines.append("EK")
-						#	lines.append("FR 0 1 0 0 %g 0"%freq)
-						#	lines.append("XQ")
-						in_sweep=1
-						lines.append("FR 0 1 0 0 %g 0"%freq)
-						lines.append("RP 0 1 1 1000 90 %g 0 0"%frequency_data[freq][0])
-				if not in_sweep: 
-					return []
-				lines.append("XQ")
-				return lines
-			else:
-				if self.options.forward: 
-					lines.append("RP 0 1 1 1000 90 %g 0 0"%self.options.forward_dir)
-				else:
-					lines.append("RP 0 1 %d 1000 90 %g 0 %g"%(int(360/self.options.angle_step)+1, self.options.forward_dir, self.options.angle_step))
-				lines.append("XQ")
-				lines.append("EN")
+			for i in xrange(len(ranges)):
+				lines.append("FR 0 %d 0 0 %g %g"%(ranges[i][2],ranges[i][0],ranges[i][1]))
+				if not angle_sweep:
+					lines.append("RP 0 1 1 1000 90 %g 0 0"%angles[i])
+				else: 
+					lines.append("RP 0 1 %d 1000 90 %g 0 %g"%(int(360/self.options.angle_step)+1, angles[i], self.options.angle_step))
 		else:
+			lines.append("FR 0 %d 0 0 %g %g"%(ranges[0][2],ranges[0][0],ranges[0][1]))
 			lines.append("PQ -1")
 			lines.append("PT -1")
-			lines.append("XQ")
-			lines.append("EN")
+		lines.append("XQ")
+		lines.append("EN")
 		return lines
 #		self.writeNecInput(filename, lines, ["FR", "XQ", "RP", "EN"])
 	def agtLines(self, nec_input_lines, sweep):
@@ -779,10 +784,8 @@ class NecFileObject:
 		for line in nec_input_lines:
 			if line[0:2]!="LD":
 				lines.append(line)
-		#lines.append("FR 0 1 0 0 %g 0"%sweep[0])
-		#lines.append("XQ")
-		#print "agt freq=%g"%(sweep[0]+(sweep[2]-1)*.5*sweep[1])
-		lines.append("FR 0 0 0 0 %g 0"%(sweep[0]+(sweep[2]-1)*.5*sweep[1]))
+		agt_freq = sweep.agt_freq
+		lines.append("FR 0 0 0 0 %g 0"%agt_freq)
 		step = self.options.angle_step
 		if step < 5 and self.options.forward:
 			step = 5
@@ -842,7 +845,6 @@ class NecFileObject:
 			agt = self.parseAgt(nec_output)
 			if get_agt_scores:
 				return (nec_output,agt)
-			#print "sweep (%g,%d,%g) - AGT=%g (%g)"%(sweep[0],sweep[1],sweep[2],agt,10*math.log10(agt))
 		if self.options.engine_takes_cmd_args:
 			popen = sp.Popen([self.options.engine, nec_input, nec_output] )
 			popen.wait()
@@ -861,7 +863,7 @@ class NecFileObject:
 				f.close()
 		return (nec_output,agt)
 		
-	def runSweepT(self, nec_input_lines, sweep, number, result_map, result_lock, id, get_agt_scores=0, use_agt = None ):
+	def runSweepT(self, nec_input_lines, sweep, number, result_map, result_lock, get_agt_scores=0, use_agt = None ):
 		try:
 			ua = None
 			if use_agt and number in use_agt:
@@ -877,40 +879,50 @@ class NecFileObject:
 			return
 		result_lock.acquire()
 		try: 
-			if r : result_map[number]=(r[0],id,r[1], number)
+			if r : result_map[number]=(r[0],sweep.sweepid,r[1], number)
 		finally: result_lock.release()
 
-	def runSweeps(self, sweeps, cleanup=0, get_agt_scores = 0, use_agt = None):
-		if cleanup:
-			import os, time, stat
-			try:
-				ldir = os.listdir(self.options.output)
-				n = time.time()
-				for f in ldir:
-					try:
-						f = os.path.join(self.options.output,f)
-						s = os.stat(f)
-						if s[stat.ST_MTIME] + 180 < n:
-							os.remove(f)
-					except:
-						pass
-			except:
-				pass
-
-		total_freqs = 0
+	def prepareSweeps(self):
+		total_freqs = len(self.options.frequency_data)
 		num_cores = self.options.num_cores
-		for i in sweeps:
-			total_freqs = total_freqs+i[2]
+		sweeps = self.options.sweeps
+		if not total_freqs: 
+			for i in sweeps: 
+				total_freqs = total_freqs+i[2]
+		self.sweeps = []
+		if not total_freqs: 
+			return self.sweeps
 		if total_freqs < num_cores : 
-			num_cores = max(total_freqs/2,1)
-		freqs_per_core = total_freqs/num_cores
+			num_cores = total_freqs
+		freqs_per_core = (total_freqs+.0)/num_cores
+		
+		freqs_per_sweep = [0]*len(sweeps)
+		if self.options.frequency_data:
+			for f in self.options.frequency_data.keys():
+				for s in range(len(sweeps)):
+					sw = sweeps[s]
+					if f>=sw[0] and f <=sw[0]+sw[1]*sw[2]:
+						freqs_per_sweep[s]+=1
+						break
+		else:
+			for s in range(len(sweeps)):
+				freqs_per_sweep[s] = sweeps[s][2]
+
+		i=len(sweeps)
+		while i:
+			i-=1
+			if not freqs_per_sweep[i]:
+				del freqs_per_sweep[i]
+				del sweeps[i]
+
+		
 		cores_per_sweep = [0]*len(sweeps)
 		while num_cores:
 			for i in xrange(len(sweeps)):
 				if cores_per_sweep[i]: continue
-				if sweeps[i][2] < freqs_per_core:
+				if freqs_per_sweep[i] < freqs_per_core:
 					cores_per_sweep[i] =  1 
-					total_freqs = total_freqs - sweeps[i][2]
+					total_freqs = total_freqs - freqs_per_sweep[i]
 					num_cores = num_cores-1
 					if not num_cores: break
 				else:
@@ -921,14 +933,83 @@ class NecFileObject:
 					if cores_per_sweep[i]: continue
 					cores_per_sweep[i] = 1
 				break
-			if freqs_per_core == total_freqs/num_cores:
+			if freqs_per_core == (total_freqs+.0)/num_cores:
+				smallest = -1
+				smallest_count = total_freqs+1
 				for i in xrange(len(sweeps)):
 					if cores_per_sweep[i]: continue
-					cores_per_sweep[i] =  int(sweeps[i][2]/freqs_per_core) 
-				break
-			freqs_per_core = total_freqs/num_cores
+					if freqs_per_sweep[i] < smallest_count:
+						smallest_count = freqs_per_sweep[i]
+						smallest = i
+						
+				cores_per_sweep[smallest] = min(num_cores, round(freqs_per_sweep[smallest]/freqs_per_core) )
+				num_cores = num_cores-cores_per_sweep[smallest]
+				total_freqs = total_freqs - freqs_per_sweep[smallest]
 
-		
+			if not num_cores or not total_freqs: break
+			freqs_per_core = (total_freqs+.0)/num_cores
+
+		for i in xrange(len(sweeps)):
+			self.appendSweep(sweeps[i],cores_per_sweep[i],freqs_per_sweep[i], i)
+
+	def appendSweep(self, sweep, num_cores, sweep_size,sweepid):
+		sweep_freqs = []
+		angles = []
+		while num_cores:
+			num_freqs = int(sweep_size/num_cores)
+			if not self.options.frequency_data:
+				half = int(num_freqs / 2)
+				self.sweeps.append(Sweep( [(sweep[0],sweep[1],num_freqs)],[self.options.forward_dir],sweep[0]+half*sweep[1],sweepid))
+			else:
+				if not sweep_freqs:
+					freqs = sorted(self.options.frequency_data.keys())
+					for freq in freqs:
+						if freq >= sweep[0] and freq <= sweep[0]+sweep[1]*sweep[2]:
+							sweep_freqs.append(freq)
+							angles.append(self.options.frequency_data[freq][0])
+
+				if num_freqs == 1:
+					self.sweeps.append(Sweep( [(sweep_freqs[0],0,1)], [angles[0]], sweep_freqs[0],sweepid))
+					del sweep_freqs[0]
+					del angles[0]
+				elif num_freqs == 2:
+					self.sweeps.append(Sweep( [(sweep_freqs[0],0,1), (sweep_freqs[1],0,1)], angles[0:2], sweep_freqs[0],sweepid))
+					del sweep_freqs[0:2]
+					del angles[0:2]
+				else:
+					freqs = sorted(sweep_freqs[0:num_freqs])
+					mid_freq = (sweep_freqs[num_freqs-1]+sweep_freqs[0])/2
+					agt_index = 0
+					for i in xrange(1,num_freqs):
+						if abs(sweep_freqs[i]-mid_freq) < abs(sweep_freqs[agt_index]-mid_freq):
+							agt_index = i
+					self.sweeps.append(Sweep( [(sweep_freqs[i],0,1) for i in range(num_freqs)], angles[0:num_freqs], sweep_freqs[agt_index],sweepid))
+					del sweep_freqs[0:num_freqs]
+					del angles[0:num_freqs]
+
+
+			sweep = (sweep[0]+num_freqs*sweep[1],sweep[1],sweep[2]-num_freqs)
+			num_cores = num_cores-1
+			sweep_size-=num_freqs
+
+	def cleanupOutput(self, older_than = 180):
+		import os, time, stat
+		try:
+			ldir = os.listdir(self.options.output)
+			now = time.time()
+			for f in ldir:
+				try:
+					f = os.path.join(self.options.output,f)
+					s = os.stat(f)
+					if s[stat.ST_MTIME] + older_than < now:
+						os.remove(f)
+				except:
+					pass
+		except:
+			pass
+
+
+	def runSweeps(self, cleanup=0, get_agt_scores = 0, use_agt = None):
 		results={}
 		number=0
 		try:
@@ -940,18 +1021,11 @@ class NecFileObject:
 		from threading import Lock, Thread
 		result_lock = Lock()
 		threads = []
-		for i in xrange(len(sweeps)):
-			ncores = cores_per_sweep[i]
-		
-			sweep = sweeps[i]
-			fps = sweep[2]/ncores
-			for j in xrange(ncores):
-				s = [sweep[0]+j*fps*sweep[1],sweep[1],fps]
-				if j==ncores-1:
-					s = [sweep[0]+j*fps*sweep[1],sweep[1],sweep[2]-j*fps]
-				threads.append(Thread(target=self.runSweepT, args=(nec_input_lines, s, number,results, result_lock,i,get_agt_scores,use_agt )))
-				threads[-1].start()
-				number = number+1
+		for i in xrange(len(self.sweeps)):
+			sweep = self.sweeps[i]
+			threads.append(Thread(target=self.runSweepT, args=(nec_input_lines, sweep, number,results, result_lock,get_agt_scores,use_agt )))
+			threads[-1].start()
+			number = number+1
 
 		for t in threads:
 			t.join()
@@ -961,9 +1035,10 @@ class NecFileObject:
 			r.append(results[i])
 		return r
 
+
 	def evaluate(self, cleanup=0, chart_like=0):
 		NOP = NecOutputParser 
-		results = self.runSweeps(sorted(self.options.sweeps), cleanup) #[[174,6,8],[470,6,40]]
+		results = self.runSweeps(cleanup) #[[174,6,8],[470,6,40]]
 		h={}
 		v={}
 		if not chart_like:
@@ -1031,14 +1106,18 @@ class OptionParser(optparse.OptionParser):
 		self.add_option("--engine-takes-cmd-args", default="auto", type="string", help="the nec engine takes command args, default=auto (which means no on windows yes otherwise). Other options are 'yes' or 'no'.")
 		self.add_option("-d", "--min-wire-distance", default=.005, type="float", help="minimum surface-to-surface distance allowed between non-connecting wires, default=%default")
 		self.add_option("--debug", default=0, type="int", help="turn on some loging")
-		self.add_option("--backward-dir", default=180, type="int", help="the backward direction (relative to --forward-dir) to which F/R and F/B are calculated. The default is 180 which means the exact opposite of the forward-dir")
 		self.add_option("--forward-dir", default=0, type="int", help="the forward direction, by default is 0 which means the antenna forward is along X.")
+		self.add_option("--backward-dir", default=180, type="int", help="the backward direction (relative to --forward-dir) to which F/R and F/B are calculated. The default is 180 which means the exact opposite of the forward-dir")
+		self.add_option("--rear-angle", default=120, type="int", help="angle for calculating rear gain (max 270)")
 		self.set_defaults(gain_type=1)
 		self.add_option("--vertical-gain", action="store_const", const=0, dest="gain_type", help="calculate horizontal gain [default]")
 		self.add_option("--horizontal-gain", action="store_const", const=1, dest="gain_type", help="calculate vertical gain")
 		self.add_option("--total-gain", action="store_const", const=2, dest="gain_type", help="calculate total gain")
+		self.add_option("-f", "--frequency_data", default = "{}", help="a map of frequency to (angle, expected_gain) tuple" )
 	def parse_args(self):
 		options, args = optparse.OptionParser.parse_args(self)
+		if options.rear_angle<0 or options.rear_angle>270: raise ValueError("Invalid rear angle of %d"%options.rear_angle)
+		options.frequency_data = eval(options.frequency_data)
 		if options.input == "":
 			if len(args):
 				options.input=args[0]
@@ -1063,13 +1142,11 @@ def optionParser():
 		def __init__(self):
 			OptionParser.__init__(self)
 			self.add_option("--param-values-file", default="", help="Read the parameter values from file, generate output.nec and evaluate it instead of the input file. The file should contain two lines: space separated parameter names on the first and space separated values on the second.")
-			self.add_option("--agt-correction", default=1, type="int", help="set to 0 to disable agt correction. It is faster but less accurate.")
+			self.add_option("--agt-correction", default=1, type="int", help="ignored. agt correction is always applied")
 			self.add_option("-c", "--centers", default=True, help="run sweep on the channel centers",action="store_false", dest="ends")
-			self.add_option("-f", "--frequency_data", default = "{}", help="a map of frequency to (angle, expected_gain) tuple" )
 			self.add_option("--chart", default=0, action="store_true")
 			self.add_option("--js-model", default=0, action="store_true", help="write jsmodel")
 			self.add_option("--cleanup", default=0, action="store_true", help="remove output")
-			self.add_option("--rear-angle", default=120, type="int", help="angle for calculating rear gain (max 270)")
 		def parse_args(self):
 			options, args = OptionParser.parse_args(self)
 			class Calc: pass
@@ -1080,8 +1157,6 @@ def optionParser():
 			options.quiet=0
 			options.forward = 0
 			options.verbose=0
-			options.frequency_data = eval(options.frequency_data)
-			if options.rear_angle<0 or options.rear_angle>270: raise ValueError("Invalid rear angle of %d"%options.rear_angle)
 			if not options.sweeps:
 				options.sweeps = [(470,6,39)]
 			if not options.ends:

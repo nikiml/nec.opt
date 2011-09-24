@@ -246,10 +246,15 @@ data members:
       test_vector = list(self.population[ii]) #self.population[ii].deep_copy()
       # first the parameters that sure cross over
       for jj in xrange( self.vector_length  ):
+        if self.evaluator.enforce_domain_limits:
+          if vi[ permut[jj] ] > self.evaluator.domain[ permut[jj] ][1]:
+            vi[ permut[jj] ] = (self.evaluator.domain[ permut[jj] ][1]+test_vector[ permut[jj] ])/2
+          if vi[ permut[jj] ] < self.evaluator.domain[ permut[jj] ][0]:
+            vi[ permut[jj] ] = (self.evaluator.domain[ permut[jj] ][0]+test_vector[ permut[jj] ])/2
         if (jj<self.n_cross):
           test_vector[ permut[jj] ] = vi[ permut[jj] ]
         else:
-          if (rnd[jj]>self.cr):
+          if (rnd[jj]<self.cr):
             test_vector[ permut[jj] ] = vi[ permut[jj] ]
       # get the score please
       test_score = self.evaluator.testMemberAgainstScore(test_vector, self.scores[ii])

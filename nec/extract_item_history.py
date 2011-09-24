@@ -17,6 +17,9 @@ def parseLogFile(filename, np, population_member=0, number_of_lines=None):
 		return ()
 
 	vars = lines[i].split()[1:]
+	score_index = vars.index("R0mg")
+	vars = vars[0:score_index]
+	score_index+=1
 	lines = lines[i+1:]
 	#if number_of_lines !=None and number_of_lines > len(lines):
 	#	lines = lines[-number_of_lines:-1]
@@ -24,6 +27,7 @@ def parseLogFile(filename, np, population_member=0, number_of_lines=None):
 	c = 0
 	scores = []
 	population = []
+	cr_stats=[0]
 	for ln in lines:
 		if ln[0]=='#': continue
 		c+=1
@@ -33,9 +37,16 @@ def parseLogFile(filename, np, population_member=0, number_of_lines=None):
 		score = float(ln[0])
 		if not scores or score < scores[-1]:
 			scores.append(score)
-			population.append(map(floatOrNone, ln[1:]))
-	
-	return (vars,scores, population)
+			new_gen = map(floatOrNone, ln[1:score_index])
+			if population:
+				crs = 0
+				for i in xrange(len(population[-1])):
+					if population[-1][i]!=new_gen[i]:
+						crs+=1
+				cr_stats.append(crs)
+			population.append(new_gen)
+
+	return (vars,scores, population,cr_stats)
 
 
 if __name__ == "__main__":
@@ -45,15 +56,19 @@ if __name__ == "__main__":
 	options.add_option("-l", "--log-file", default="opt.log")
 	options.add_option("-n", "--number-of-lines", default=0,type="int")
 	options.add_option("-m", "--member", default=0, type="int")
+	options.add_option("-s", "--cr-stats", default=False, action="store_true")
 	opts, args = options.parse_args()
 	p = parseLogFile(opts.log_file, opts.de_np, opts.member, opts.number_of_lines)
 	if not p:
 		print "Failed to extract history"
 	else:
-		vars,scores, population = p
+		vars,scores, population, cr_stats = p
 		print ((len(vars)+1)*"%9s ")%tuple(["Score"]+vars)
 		for i in range(len(scores)):
-			print ( (len(vars)+1)*"%3.5f ")%tuple([scores[i]]+population[i])
+			if opts.cr_stats:
+				print ( (len(vars)+1)*"%3.5f "+" cr=%d")%tuple([scores[i]]+population[i]+[cr_stats[i]])
+			else:
+				print ( (len(vars)+1)*"%3.5f ")%tuple([scores[i]]+population[i])
 
 
 	
