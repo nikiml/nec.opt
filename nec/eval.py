@@ -992,7 +992,7 @@ class NecFileObject:
 			num_cores = num_cores-1
 			sweep_size-=num_freqs
 
-	def cleanupOutput(self, older_than = 180):
+	def cleanupOutput(self, older_than = 10):
 		import os, time, stat
 		try:
 			ldir = os.listdir(self.options.output)
@@ -1009,7 +1009,9 @@ class NecFileObject:
 			pass
 
 
-	def runSweeps(self, cleanup=0, get_agt_scores = 0, use_agt = None):
+	def runSweeps(self, get_agt_scores = 0, use_agt = None):
+		if self.options.cleanup:
+			self.cleanupOutput(self.options.cleanup)
 		results={}
 		number=0
 		try:
@@ -1036,9 +1038,9 @@ class NecFileObject:
 		return r
 
 
-	def evaluate(self, cleanup=0, chart_like=0):
+	def evaluate(self, chart_like=0):
 		NOP = NecOutputParser 
-		results = self.runSweeps(cleanup) #[[174,6,8],[470,6,40]]
+		results = self.runSweeps() #[[174,6,8],[470,6,40]]
 		h={}
 		v={}
 		if not chart_like:
@@ -1114,6 +1116,7 @@ class OptionParser(optparse.OptionParser):
 		self.add_option("--horizontal-gain", action="store_const", const=1, dest="gain_type", help="calculate vertical gain")
 		self.add_option("--total-gain", action="store_const", const=2, dest="gain_type", help="calculate total gain")
 		self.add_option("-f", "--frequency_data", default = "{}", help="a map of frequency to (angle, expected_gain) tuple" )
+		self.add_option("--cleanup", default=180, type="int", help="remove output files older than CLEANUP seconds. set to 0 to disable")
 	def parse_args(self):
 		options, args = optparse.OptionParser.parse_args(self)
 		if options.rear_angle<0 or options.rear_angle>270: raise ValueError("Invalid rear angle of %d"%options.rear_angle)
@@ -1146,7 +1149,6 @@ def optionParser():
 			self.add_option("-c", "--centers", default=True, help="run sweep on the channel centers",action="store_false", dest="ends")
 			self.add_option("--chart", default=0, action="store_true")
 			self.add_option("--js-model", default=0, action="store_true", help="write jsmodel")
-			self.add_option("--cleanup", default=0, action="store_true", help="remove output")
 		def parse_args(self):
 			options, args = OptionParser.parse_args(self)
 			class Calc: pass
@@ -1169,7 +1171,7 @@ def optionParser():
 
 def run(options):
 	nf = NecFileObject(options)
-	nf.evaluate(options.cleanup, options.chart)
+	nf.evaluate(options.chart)
 
 def main():
 #default values

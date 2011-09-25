@@ -201,7 +201,7 @@ class NecFileEvaluator:
 		self.nec_file.writeNecInput("final"+fn)
 		self.nec_file.writeParametrized("output"+fn, comments = self.comments+["Score %g"%self.best_score,""])
 		if interrupted: return
-		self.nec_file.evaluate(cleanup=1)
+		self.nec_file.evaluate()
 	
 	def iterationCallback(self, iter_no, population, scores, improved):
 		return
@@ -328,7 +328,7 @@ class NecFileEvaluator:
 			self.nec_file.vars[var]=vector[i]
 
 		#print "in target_ : Get agt score = %d"%get_agt_score
-		results = self.nec_file.runSweeps(1, get_agt_score, use_agt)
+		results = self.nec_file.runSweeps(get_agt_score, use_agt)
 		res = -1000
 		agts = {}
 		if not results:
@@ -596,7 +596,7 @@ def main():
 			#from scipy import optimize
 			import simplex
 			if not options.quiet: print "N=%d"%len(evaluator.x)
-			evaluator.x = simplex.fmin(evaluator, ftol=options.local_search_tolerance, xtol=options.local_search_tolerance, maxiter=options.max_iter)
+			evaluator.x = simplex.fmin(evaluator, ftol=options.local_search_tolerance, xtol=options.local_search_tolerance, maxfun=options.max_iter)
 		#evaluator.nec_file.writeNecInput("final.nec")
 		evaluator.evaluateFinalSolution()
 	except KeyboardInterrupt:
