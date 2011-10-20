@@ -290,6 +290,19 @@ var antennaGeometry = function (holder,w,h, scale, coords, ini_x_off_, ini_y_off
 			deselectAll(); 
 			that.redraw();
 		},
+	    drawHelpLink = function()
+	    	{
+			rct = raphael.rect(w-30,1,30,12,2);
+			rct.attr({fill:"#fff", stroke:"none"});
+			rct.click(function(){window.open("../help.html")})
+			rct.mouseover(function(){;this.attr({fill:"#fd0"});});
+			rct.mouseout(function(){this.attr({fill:"#fff"});});
+			txt=raphael.text(w-15,6,"Help");
+			txt.click(function(){window.open("../help.html")})
+			txt.rect = rct;
+			txt.mouseover(function(){;this.rect.attr({fill:"#fd0"});this.attr({"font-weight":"bold"});});
+			txt.mouseout(function(){this.rect.attr({fill:"#fff"});this.attr({"font-weight":"normal"});});
+		},
 	    drawConfigurations = function()
 		{
 			if(!confs.length) 
@@ -302,7 +315,7 @@ var antennaGeometry = function (holder,w,h, scale, coords, ini_x_off_, ini_y_off
 			{
 				l+=confs[i][0].length;
 			}
-			var charsize = Math.min((w-20.0)/(l+confs.length+1), 8), start=(w-charsize*l)/2-10;
+			var charsize = Math.min((w-20.0)/(l+confs.length+1), 8), start=(w-charsize*l)/2-30;
 			raphael.text(start+confs_title.length*charsize/2,top/2,confs_title);
 			start+=(1+confs_title.length)*charsize;
 			for(i=0;i!==confs.length; ++i)
@@ -339,7 +352,7 @@ var antennaGeometry = function (holder,w,h, scale, coords, ini_x_off_, ini_y_off
 			    xs=[],ys=[],zs=[],str="";
 			if (! selected.length)
 			{
-				raphael.text(w/2 ,top+7,"Select elements for info. Double click to clear. Total len="+lenToUnit(total_len));
+				raphael.text(w/2-20 ,top+7,"Select elements for info. Double click to clear. Total len="+lenToUnit(total_len));
 				return;
 			}
 			for(i=0; i!==selected.length; ++i)
@@ -398,7 +411,7 @@ var antennaGeometry = function (holder,w,h, scale, coords, ini_x_off_, ini_y_off
 				str+=" Total len="+lenToUnit(accumulated_len);
 			}
 	
-			raphael.text(w/2,top+7,"Selection info ("+selected.length+"): "+str);
+			raphael.text(w/2-20,top+7,"Selection info ("+selected.length+"): "+str);
 		},
 	    deselectAll = function()
 		{
@@ -579,6 +592,7 @@ var antennaGeometry = function (holder,w,h, scale, coords, ini_x_off_, ini_y_off
 		}
 
 		drawInformation(selected, total_len);
+		drawHelpLink();
 		drawConfigurations();
 		raphael.circle(15, h-15,10).attr({fill: bgcolor}).click(function(event){scale=scale*1.1; that.redraw(); });
 		raphael.g.plus(15, h-15,10).attr({fill: "#000"}).click(function(event){scale=scale*1.1; that.redraw(); });
@@ -610,7 +624,7 @@ var gainChart = function (holder,w,h, channels, gain, swr, gainmin,gainmax,swrma
 	    tags = r.set(),
 	    i,j,
 	    legend, color, altcolor, data, chartopts, gain_chart,swr_chart,
-	    color_rect;
+	    color_rect, chart_length= Math.min(channels.length,gain.length);
 	if(title) { r.text(w/2,10,title).attr({"font-size":14}); }
 	r.g.txtattr.font = "10px 'Fontin Sans', Fontin-Sans, sans-serif";
 
@@ -651,11 +665,12 @@ var gainChart = function (holder,w,h, channels, gain, swr, gainmin,gainmax,swrma
 		altcolor = swr[i][1];
 		data = gain[i].slice(2);
 		if ( i ){
-			chartopts =  {gutter: 10, nostroke: false, axis: "0 0 0 0", symbol: "o", smooth: true, axisystep:(gainmax-gainmin)*2, axisxstep:channels.length-1, axisymin:gainmin, axisymax:gainmax};
+			chartopts =  {gutter: 10, nostroke: false, axis: "0 0 0 0", symbol: "o", smooth: true, axisystep:(gainmax-gainmin)*2, axisxstep:channels.length-1, axisymin:gainmin, axisymax:gainmax, dash:""};
 		}else
 		{
-			chartopts =  {gutter: 10, nostroke: false, axis: "0 0 1 1", symbol: "o", smooth: true, axisystep:(gainmax-gainmin)*2, axisxstep:channels.length-1, axisymin:gainmin, axisymax:gainmax, grid:"5 2"};
+			chartopts =  {gutter: 10, nostroke: false, axis: "0 0 1 1", symbol: "o", smooth: true, axisystep:(gainmax-gainmin)*2, axisxstep:channels.length-1, axisymin:gainmin, axisymax:gainmax, grid:"5 2", dash:""};
 		}
+		if ( data.length > channels.length) { data = data.slice(0,channels.length); }
 		gain_chart = r.g.linechart(20, 20, w, h, [channels], [data],chartopts).hover(hoverIn, hoverOut);
 		gain_chart.symbols.attr({r: 2});
 		gain_chart.lines.attr({stroke: color});
@@ -686,11 +701,12 @@ var gainChart = function (holder,w,h, channels, gain, swr, gainmin,gainmax,swrma
 		altcolor = gain[i][1];
 		data = swr[i].slice(2);
 		if ( i ){
-			chartopts =  {gutter: 10, nostroke: false, axis: "0 0 0 0", symbol: "o", smooth: true, axisystep:(swrmax-1)*2, axisxstep:channels.length-1, axisymin:1, axisymax:swrmax};
+			chartopts =  {gutter: 10, nostroke: false, axis: "0 0 0 0", symbol: "o", smooth: true, axisystep:(swrmax-1)*2, axisxstep:channels.length-1, axisymin:1, axisymax:swrmax, dash:""};
 		}else
 		{
-			chartopts =  {gutter: 10, nostroke: false, axis: "0 1 0 0", symbol: "o", smooth: true, axisystep:(swrmax-1)*2, axisxstep:channels.length-1, axisymin:1, axisymax:swrmax, grid:"0 1"};
+			chartopts =  {gutter: 10, nostroke: false, axis: "0 1 0 0", symbol: "o", smooth: true, axisystep:(swrmax-1)*2, axisxstep:channels.length-1, axisymin:1, axisymax:swrmax, grid:"0 1", dash:""};
 		}
+		if ( data.length > channels.length) { data = data.slice(0,channels.length); }
 		swr_chart = r.g.linechart(20, 20, w,h, [channels], [data], chartopts).hover(hoverIn, hoverOut);
 		swr_chart.symbols.attr({r: 2});
 		swr_chart.lines.attr({stroke: color});
@@ -717,8 +733,8 @@ var gainChart = function (holder,w,h, channels, gain, swr, gainmin,gainmax,swrma
 	}
 };
 
-var uhf_channels = [14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53];
-var uhf_hi_channels= uhf_channels.concat([54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70]);
+var uhf_channels = [14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52];
+var uhf_hi_channels= uhf_channels.concat([53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70]);
 var vhf_hi_channels = [7,8,9,10,11,12,13,14];
 var 
 	uhfChart = function (holder,w,h, gain, swr, gainmin,gainmax,swrmax,title) {
@@ -764,12 +780,12 @@ var AntennaHPattern = function (holder,size, channels, models, sym, model_names,
 		circles.push(maxmax);
 		maxmax-=3;
 	}
-	if(maxmax <= 2){
+	if(maxmax>0 && maxmax <= 2){
 		circles.push(0);
-	}else if(maxmax <= 5 ){
+	}else if(maxmax>0 && maxmax <= 5 ){
 		circles.push(maxmax);
 		circles.push(0);
-	}else{
+	}else if (maxmax>0){
 		var ratio = Math.round(maxmax/5.0);
 		ratio = Math.round(maxmax/ratio-.5);
 		while(maxmax >=ratio)
@@ -778,6 +794,11 @@ var AntennaHPattern = function (holder,size, channels, models, sym, model_names,
 			maxmax-=ratio;
 		}
 		circles.push(0);
+	}else { //maxmax <=0
+		if (circles.length>2){
+			circles.pop();
+		}
+		circles.push(0); 
 	}
 	circles.push(-5);
 	circles.push(-10);
@@ -947,13 +968,13 @@ var AntennaHPattern = function (holder,size, channels, models, sym, model_names,
 				btn.mouseout(onBtnOut);
 				btn.onBtnOver = onBtnOver;
 				btn.onBtnOut = onBtnOut;
-				raphael.text((i+.5)*size/models.length, 18, sym?("F: "+p[0]+"dBi, B: "+p[p.length-1]+"dBi"):("F: "+p[0]+"dBi, B: "+p[Math.round(p.length/2 - .5)]+"dBi"));
-				raphael.text((i+.5)*size/models.length, 28, p.minValue()+" < dBi < "+p.maxValue());
+				raphael.text((i+.5)*size/models.length, 18, sym?("F: "+p[0]+"dBi, B: "+p[p.length-1]+"dBi"):("F: "+p[0]+"dBi, B: "+p[Math.round(p.length/2 - .5)]+"dBi")).attr({"font-size":9});
+				raphael.text((i+.5)*size/models.length, 28, p.minValue()+" < dBi < "+p.maxValue()).attr({"font-size":9});
 			}
 			raphael.text(8, 38, channels[current]).attr({"text-anchor":"start"});
 		}else{
 			raphael.text(10, size-18, p.minValue()+" < dBi < "+p.maxValue()).attr({"text-anchor":"start"});
-			raphael.text(0, size-8, sym?("F: "+p[0]+"dBi, B: "+p[p.length-1]+"dBi"):("F: "+p[0]+"dBi, B: "+p[Math.round(p.length/2 - .5)]+"dBi")).attr({"text-anchor":"start"});
+			raphael.text(0, size-8, sym?("F: "+p[0]+"dBi, B: "+p[p.length-1]+"dBi"):("F: "+p[0]+"dBi, B: "+p[Math.round(p.length/2 - .5)]+"dBi")).attr({"text-anchor":"start","font-size":9});
 			raphael.text(8, 8, channels[current]).attr({"text-anchor":"start"});
 		}
 		for(i=0;i!=r.length-1; ++i){
@@ -1041,7 +1062,7 @@ function vhfHiFreqTitles()
 function uhfFreqTitles()
 {
 	var i=0, res=[];
-	for(; i!=40; ++i)
+	for(; i!=39; ++i)
 		res.push( (470+i*6)+" Mhz");
 	return res;
 }
