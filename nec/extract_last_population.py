@@ -1,4 +1,5 @@
-from demathutils import mean_value, min_value
+from nec.demathutils import mean_value, min_value
+from nec.eval import printOut
 
 def floatOrNone(s):
 	if s== "None":return 0
@@ -9,7 +10,7 @@ def parseLogFile(filename, np, full, number_of_lines, population_number):
 	lines = f.readlines()
 	f.close()
 	i=-1
-	for j in xrange(len(lines)):
+	for j in range(len(lines)):
 		if lines[j].find("Score")!=-1:
 			i=j
 	
@@ -26,7 +27,7 @@ def parseLogFile(filename, np, full, number_of_lines, population_number):
 	for i in range(np):
 		ln = lines[i].split()
 		scores.append(float(ln[0]))
-		population.append(map(floatOrNone, ln[1:]))
+		population.append(list(map(floatOrNone, ln[1:])))
 	
 	lines = lines[np:]
 	count = 1
@@ -42,14 +43,14 @@ def parseLogFile(filename, np, full, number_of_lines, population_number):
 			if s < scores[i]:
 				k.append((i,"%.4g"%s))
 				scores[i] = s
-				population[i] = map(floatOrNone, ln[1:])
+				population[i] = list(map(floatOrNone, ln[1:]))
 			i+=1
 		lines = lines[i:]
 		if not number_of_lines or len(lines) < number_of_lines*np:
 			if i==np:
-				print "Iteration %d [%.6g:%.6g] - %d new offsprings - "%(count,min_value(scores), mean_value(scores),len(k)) + str(k).replace("'","")
+				printOut("Iteration %d [%.6g:%.6g] - %d new offsprings - "%(count,min_value(scores), mean_value(scores),len(k)) + str(k).replace("'","") )
 			elif not full:
-				print "(*%d)Iteration %d [%.6g, %.6g] - %d new offsprings - "%(i,count,min_value(scores), mean_value(scores),len(k)) + str(k).replace("'","")
+				printOut( "(*%d)Iteration %d [%.6g, %.6g] - %d new offsprings - "%(i,count,min_value(scores), mean_value(scores),len(k)) + str(k).replace("'","") )
 				
 		count = count +1
 		if population_number and count == population_number:
@@ -72,16 +73,16 @@ if __name__ == "__main__":
 	p = parseLogFile(opts.log_file, opts.de_np, opts.full, opts.number_of_lines,opts.generation_count)
 	if opts.progress_only:exit(0)
 	if not p:
-		print "Failed to extract population"
+		printOut( "Failed to extract population")
 	else:
 		vars,scores, population = p
-		print ((len(vars)+1)*"%9s ")%tuple(["Score"]+vars)
+		printOut( ((len(vars)+1)*"%9s ")%tuple(["Score"]+vars) )
 		if opts.output_line_numbers:
 			for i in range(len(scores)):
-				print ("[%03d]. "+ (len(vars)+1)*"%3.5f ")%tuple([i]+[scores[i]]+population[i])
+				printOut( ("[%03d]. "+ (len(vars)+1)*"%3.5f ")%tuple([i]+[scores[i]]+population[i]) )
 		else:
 			for i in range(len(scores)):
-				print ( (len(vars)+1)*"%3.5f ")%tuple([scores[i]]+population[i])
+				printOut( ( (len(vars)+1)*"%3.5f ")%tuple([scores[i]]+population[i]) )
 
 
 	

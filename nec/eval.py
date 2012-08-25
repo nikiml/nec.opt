@@ -1,13 +1,21 @@
-# Copyright 2010 Nikolay Mladenov, Distributed under 
+# Copyright 2010-2012 Nikolay Mladenov, Distributed under 
 # GNU General Public License
 
-import necmath,sys, traceback, os, pprint
-from demathutils import v3add, v3mul, v3sub, v3dot, v3cross, v3len, v3unit, v3rotx, v3roty, v3rotz
+import sys, traceback, os, pprint
+from nec import necmath
+from nec.demathutils import v3add, v3mul, v3sub, v3dot, v3cross, v3len, v3unit, v3rotx, v3roty, v3rotz
 
 output = "output"
 input = "input.nec"
 autosegmentation=10
 ncores=4
+
+def printOut(s):
+	if type(s)!=type(''):
+		s = str(s)
+	sys.stdout.write(s)
+	sys.stdout.write('\n')
+	sys.stdout.flush()
 
 class GeometryError (RuntimeError):
 	def __init__(self, msg):
@@ -38,6 +46,11 @@ class FrequencyData:
 		self.horizontal = {}
 		self.vertical = {}
 		self.sorted_horizontal_angles = []
+		self.input_power = 0
+		self.radiated_power = 0
+		self.structure_loss = 0
+		self.network_loss = 0
+		self.efficiency = 0
 
 	def swr(self):
 		rc = necmath.sqrt( \
@@ -124,13 +137,13 @@ class NecOutputParser:
 	def printFreqs(self, header=1):
 		if not self.options.frequency_data:
 			if header: 
-				print "%6s %8s %8s %7s %7s %7s %8s %8s %12s"%("Freq", "RawGain", "NetGain", "SWR", "F/R", "F/B", "Real", "Imag", "AGT(corr)")
-				print "=================================================================================="
+				printOut( "%6s %8s %8s %7s %7s %7s %8s %8s %12s"%("Freq", "RawGain", "NetGain", "SWR", "F/R", "F/B", "Real", "Imag", "AGT(corr)"))
+				printOut( "==================================================================================")
 			#if self.agt!=0:
-			#	print "AGT=%g dB"%self.agt
+			#	printOut( "AGT=%g dB"%self.agt)
 			for i in self.frequencies:
 				if not i.valid():
-					print "%6.1f - invalid result"%i.freq
+					printOut( "%6.1f - invalid result"%i.freq)
 				else:
 					rear = "n/a"
 					back = "n/a"
@@ -148,19 +161,19 @@ class NecOutputParser:
 						raw = "% 8.3f"%raw
 						net = "% 8.3f"%net
 
-					print "% 6.1f % 8s % 8s % 7.3f % 7s % 7s % 8.2f % 8.2f %5.2f(% 6.3f)"%	\
-							(i.freq, raw, net,i.swr(), rear, back, i.real, i.imag, i.AGT, i.agt)
+					printOut( "% 6.1f % 8s % 8s % 7.3f % 7s % 7s % 8.2f % 8.2f %5.2f(% 6.3f)"%	\
+							(i.freq, raw, net,i.swr(), rear, back, i.real, i.imag, i.AGT, i.agt))
 
 		else:
 			if header: 
-				print "%6s %7s %6s %8s %8s %7s %8s %8s %7s %12s"%("Freq", "Target", "Angle", "RawGain", "NetGain", "SWR", "Real", "Imag", "Diff", "AGT(corr)")
-				print "========================================================================================="
+				printOut( "%6s %7s %6s %8s %8s %7s %8s %8s %7s %12s"%("Freq", "Target", "Angle", "RawGain", "NetGain", "SWR", "Real", "Imag", "Diff", "AGT(corr)"))
+				printOut( "=========================================================================================")
 			for i in self.frequencies:
 				if not i.valid():
-					print "%6.4g - invalid result"%i.freq
+					printOut( "%6.4g - invalid result"%i.freq)
 				else:
 					target = self.options.frequency_data[i.freq][1]
-					print "% 6.1f % 7.2f % 6.1f % 8.3f % 8.3f % 7.3f % 8.2f % 8.2f % 7.3f %5.2f(% 6.3f)"%(i.freq, target, i.angle, i.gain, i.net(),i.swr(), i.real, i.imag, target-i.net(), i.AGT, i.agt)
+					printOut( "% 6.1f % 7.2f % 6.1f % 8.3f % 8.3f % 7.3f % 8.2f % 8.2f % 7.3f %5.2f(% 6.3f)"%(i.freq, target, i.angle, i.gain, i.net(),i.swr(), i.real, i.imag, target-i.net(), i.AGT, i.agt))
 	def getGainSWRChartData(self):
 		res = []
 		for i in self.frequencies:
@@ -214,12 +227,30 @@ class NecOutputParser:
 				fd.AGT = self.AGT
 				fd.agt = self.agt
 
+			elif ln == "- - - POWER BUDGET - - -":
+				while i < len(lines):
+					i+=1
+					if len(lines[i]) < 60: continue
+					if lines[0][43: 57] == "INPUT POWER   ": fd.input_power = float(lines[i][58:69])
+					elif lines[0][43: 57] == "RADIATED POWER": fd.radiated_power = float(lines[i][58:69])
+					elif lines[0][43: 57] == "STRUCTURE LOSS": fd.structure_loss = float(lines[i][58:69])
+					elif lines[0][43: 57] == "NETWORK LOSS  ": fd.network_loss = float(lines[i][58:69])
+					elif lines[0][43: 57] == "EFFICIENCY    ": 
+						fd.efficiency = float(lines[i][58:65])
+						break
+					else: 
+						break
+
+				if fd.radiated_power < 0:
+					raise ValueError("engine reported negative radiated power for frequency %.1f"%freq)
 			elif ln =="- - - RADIATION PATTERNS - - -":
 				i=i+5
 				angle = self.options.forward_dir
 #				freq = self.frequencies[-1].freq
 				if freq in self.options.frequency_data.keys():
 					angle = self.options.frequency_data[freq][0]
+					while angle <0:angle+=360
+					while angle >360:angle-=360
 				while len(lines[i].strip()):
 					ln = lines[i]
 					if ln[0]=="*" or len(ln) < 8 :break
@@ -283,7 +314,7 @@ class NecFileObject:
 		self.autoSegmentation(self.options.auto_segmentation)
 		self.prepareSweeps()
 		if self.options.debug:
-			print "Engine jobs:"
+			printOut( "Engine jobs:")
 			pprint.pprint(self.sweeps)
 
 	def readSource(self, sourcefile):
@@ -295,6 +326,16 @@ class NecFileObject:
 		if not self.lines: raise "Empty input file"
 		self.parse()
 	
+	def evalVarLine(self, line, g=None, l=None):
+		ln = line.replace("^","**")
+		if l is None:
+			d={}
+			exec(ln, {}, d)
+			return d
+		else:
+			exec(ln, g, l)
+
+
 	def parse(self):		
 		if self.options.debug: sys.stderr.write("debug: Parsing input\n")
 		self.vars = {}
@@ -302,7 +343,7 @@ class NecFileObject:
 		self.varlines=[]
 		self.source_tags={}
 		self.comments = []
-		for i in xrange(len(self.lines)):
+		for i in range(len(self.lines)):
 			ln = self.lines[i].strip('\n')
 			comment_pos = ln.find("'")
 			if comment_pos!=-1:
@@ -314,13 +355,12 @@ class NecFileObject:
 			if ln[0:2]== "SY":
 				if self.options.debug >1: sys.stderr.write("debug: \tParsing line: \"%s\"\n"%ln)
 				try:
-					d = {}
-					exec(ln[3:].strip(), {}, d)
+					d = self.evalVarLine(ln[3:].strip())
 					if self.options.debug: 
-						sys.stderr.write("debug: \tAdded independent parameter \"%s\"\n"%d.keys()[0])
+						for dk in d.keys(): sys.stderr.write("debug: \tAdded independent parameter \"%s\"\n"%dk)
 						if self.options.debug>1: sys.stderr.write("debug: \t\tFull comment = \"%s\"\n"%comment)
 					self.vars.update(d)
-					self.paramlines[d.keys()[0]]=i
+					for dk in d.keys(): self.paramlines[dk]=i
 					try:
 						#strip the real comment from the comment
 						comment_pos = comment.find("'")
@@ -330,12 +370,13 @@ class NecFileObject:
 							sys.stderr.write("debug: \t\tLimits comment = \"%s\"\n"%comment)
 						min, max = eval(comment)
 						if min <= max:
-							self.min_max[d.keys()[0]]=(float(min),float(max))
+							for dk in d.keys(): self.min_max[dk]=(float(min),float(max))
 						else:
-							self.min_max[d.keys()[0]]=(float(max),float(min))
+							for dk in d.keys(): self.min_max[dk]=(float(max),float(min))
 						if self.options.debug: sys.stderr.write("debug: \t\tlimits(%.3g, %.3g)\n"%(float(min), float(max)))
 					except:
-						if self.options.debug>1: sys.stderr.write("debug: \tNo limits found for parameter \"%s\"\n"%d.keys()[0])
+						if self.options.debug>1: 
+							for dk in d.keys(): sys.stderr.write("debug: \tNo limits found for parameter \"%s\"\n"%dk)
 						pass
 				except:
 					if self.options.debug: sys.stderr.write("debug: \tAdded dependent parameter \"%s\"\n"%ln[3:].strip())
@@ -344,7 +385,22 @@ class NecFileObject:
 				self.varlines.append(ln.replace(',',' ').split())
 				self.comments.append(comment);
 				if ln[0:2]=="EX":
-					self.source_tags[int(self.varlines[-1][2])]=(len(self.varlines)-1,i)
+					tag = int(self.varlines[-1][2])
+					if tag not in self.source_tags:
+						self.source_tags[tag]=[(len(self.varlines)-1,i,3)]
+					else:
+						self.source_tags[tag].append((len(self.varlines)-1,i,3))
+				if ln[0:2]=="TL" or ln[0:2]=="NT":
+					tag = int(self.varlines[-1][1])
+					if tag not in self.source_tags:
+						self.source_tags[tag]=[(len(self.varlines)-1,i,2)]
+					else:
+						self.source_tags[tag].append((len(self.varlines)-1,i,2))
+					tag = int(self.varlines[-1][3])
+					if tag not in self.source_tags:
+						self.source_tags[tag]=[(len(self.varlines)-1,i,4)]
+					else:
+						self.source_tags[tag].append((len(self.varlines)-1,i,4))
 				elif ln[0:2] == "FR":
 					self.frequency = float(self.varlines[-1][5])
 				elif ln[0:2] == "GS":
@@ -354,6 +410,7 @@ class NecFileObject:
 
 		for i in self.vars.keys():
 			self.vars[i]=float(self.vars[i])
+
 	def parseParameterValues(self, file):
 		try:
 			f = open(file,"rt")
@@ -364,7 +421,7 @@ class NecFileObject:
 		if len(lines)<2: raise  RuntimeError("invalid Parametes files")
 		vars = lines[0].split()
 		del lines[0]
-		lines[0] = map(float, lines[0].split())
+		lines[0] = list(map(float, lines[0].split()))
 		opt_vars = {}
 		for i in range(len(vars)):
 			if vars[i] not in self.vars: raise RuntimeError("invalid Parameter name")
@@ -393,12 +450,19 @@ class NecFileObject:
 		length = self.calcLength(line) 
 		nsegs = length*self.autosegment[0]/self.autosegment[1]
 		line[1] = max(int(nsegs+.5),1)
-		if line[0] in self.source_tags:
-			if line[1] > 2: line[1]=line[1]+2
-			if line[1] % 2 == 0:
-				line[1]=line[1]+1
-			self.varlines[self.source_tags[line[0]][0]][3] = str(int(line[1]/2)+1)
-			self.lines[self.source_tags[line[0]][1]] = " ".join(self.varlines[self.source_tags[line[0]][0]])
+		tag = line[0]
+		segs = line[1]
+		if tag in self.source_tags:
+			if segs > 2: segs+=2
+			if segs % 2 == 0:
+				segs+=1
+			line[1]=segs
+			for refln in self.source_tags[tag]:
+				varline_no = refln[0]
+				line_no = refln[1]
+				token_no = refln[2]
+				self.varlines[varline_no][token_no] = str(int(segs/2)+1)
+				self.lines[line_no] = " ".join(self.varlines[varline_no])
 		
 
 	def autoSegmentation(self, segs_per_halfwave=0, freq = None):
@@ -406,6 +470,7 @@ class NecFileObject:
 		if not freq: freq = 585
 		halfwave = 150.0/freq
 		self.autosegment = (segs_per_halfwave, halfwave)
+		#printOut("Autosegmentation set at %d per %g (freq=%f)"%(segs_per_halfwave, halfwave, freq))
 		
 	def writeSource(self, filename):
 		file = open(filename, "wt")
@@ -626,7 +691,7 @@ class NecFileObject:
 		self.globals={}
 		self.globals.update(self.vars)
 		for d in self.dependent_vars:
-			try: exec d in  necmath.__dict__, self.globals
+			try: self.evalVarLine(d,necmath.__dict__, self.globals)
 			except:
 				traceback.print_exc()
 				sys.stderr.write( "failed parsing '%s'\n"%(d))
@@ -635,17 +700,23 @@ class NecFileObject:
 			ln = self.varlines[li]
 			comment = self.comments[li]
 			if not ln: continue
+			fn = lambda x:self.formatNumber(x,0)
 			if ln[0].strip() != "GW":
 				if ln[0].strip() not in skiptags:
-					lines.append(" ".join(ln))
+					if ln[0].strip() != "CM":
+						sline = list(map( self.evalToken , ln[1:]))
+						sline = map(fn, sline)
+						lines.append(ln[0]+" "+" ".join(sline))
+					else:
+						lines.append(" ".join(ln))
 				if ln[0].strip() == "GX":
 					i1 = int(self.evalToken(ln[1]))
 					self.mirrorStructure(math_lines,comments, i1, int(ln[2][0]), int(ln[2][1]), int(ln[2][2]))
 					if not "GX" in skiptags:
 						lines[-1]="GX %d %s"%(i1,ln[2])
 				elif ln[0].strip() == "GM":
-					if len(ln) < 9:
-						ln=ln+(9-len(ln))*[.0]
+					if len(ln) < 10:
+						ln=ln+(10-len(ln))*[".0"]
 					i1 = int(self.evalToken(ln[1]))
 					i2 = int(self.evalToken(ln[2]))
 					f3 = self.evalToken(ln[3])
@@ -664,16 +735,29 @@ class NecFileObject:
 					self.rotateStructure(math_lines,comments, i1, i2)
 					if not "GR" in skiptags:
 						lines[-1]="GR %d %d"%(i1, i2)
+				elif ln[0].strip() == "SP":
+					i1 = int(ln[1])
+					i2 = int(self.evalToken(ln[2]))
+					if not "SP" in skiptags:
+						lines[-1]="SP %d %d "%(i1, i2)+" ".join(list(map( fn, map( self.evalToken , ln[3:]))))
+				elif ln[0].strip() == "SM":
+					i1 = int(self.evalToken(ln[1]))
+					i2 = int(self.evalToken(ln[2]))
+					if not "SM" in skiptags:
+						lines[-1]="SM %d %d "%(i1, i2)+" ".join(list(map( fn, map( self.evalToken , ln[3:]))))
+				elif ln[0].strip() == "SC":
+					i1 = int(ln[1])
+					i2 = int(ln[2])
+					if not "SC" in skiptags:
+						lines[-1]="SC %d %d "%(i1, i2)+" ".join(list(map( fn, map( self.evalToken , ln[3:]))))
 			else:
-				sline = map( self.evalToken , ln[1:])
-				math_lines.append(list(sline))
+				sline = list(map( self.evalToken , ln[1:]))
+				math_lines.append(sline)
 				comments.append(comment)
 				if self.autosegment[0]:
 					self.autoSegment(sline)
-				fn = lambda x:self.formatNumber(x,0)
 				sline = map(fn, sline)
-				sline.insert(0, ln[0])
-				lines.append(" ".join(sline))
+				lines.append(ln[0]+" "+" ".join(sline))
 		#del self.globals
 		if self.write_js_model:
 			self.writeJSModel(math_lines,comments)
@@ -684,26 +768,26 @@ class NecFileObject:
 	def writeJSModel(self, lines, comments):
 		z = zip(comments,lines)
 		z.sort()
-		print "var structure = [["
+		printOut( "var structure = [[")
 		if not z:
-			print "]]"
+			printOut("]]")
 			return;
 		c = z[0][0].strip()
-		print '"%s"'%c
+		printOut( '"%s"'%c)
 		for i in z:
 			if i[0].strip() != c:
 				c = i[0].strip()
-				print '], ["%s"'%c
+				printOut( '], ["%s"'%c)
 			ln = i[1]
-			print (",%.4f"*6) % tuple(ln[2:8])
-		print "]]"
+			printOut( (",%.4f"*6) % tuple(ln[2:8]))
+		printOut( "]]")
 
 	def writeNecInput(self, filename, extralines=[], skiptags=[]):
 		lines = self.necInputLines(skiptags)
 		if not lines: return 0
 		lines.extend(extralines)
 		file = open(filename, "wt")
-		try: file.write("\n".join(lines))
+		try: file.write("\n".join(lines)+"\n")
 		finally: file.close()
 		return 1
 
@@ -719,7 +803,7 @@ class NecFileObject:
 			else:
 				self.lines[lno] = "SY %s=%.7g" %(v, self.vars[v])
 		for d in self.dependent_vars:
-			try: exec(d, necmath.__dict__, self.globals)
+			try: self.evalVarLine(d, necmath.__dict__, self.globals)
 			except:
 				traceback.print_exc()
 				sys.stderr.write("failed parsing '%s'\n"%(d))
@@ -740,7 +824,7 @@ class NecFileObject:
 				lines.append(ln.strip()+comment)
 				continue
 			if sl[0].strip() == "GW":
-				sline = map( self.evalToken , sl[1:])
+				sline = list(map( self.evalToken , sl[1:]))
 				self.autoSegment(sline)
 				sl[2] = str(sline[1])
 				lines.append(" ".join(sl)+comment)
@@ -765,7 +849,7 @@ class NecFileObject:
 		frequency_data = self.options.frequency_data
 		angle_sweep = not self.options.frequency_data and not self.options.forward
 		if self.options.calc.gain:
-			for i in xrange(len(ranges)):
+			for i in range(len(ranges)):
 				lines.append("FR 0 %d 0 0 %g %g"%(ranges[i][2],ranges[i][0],ranges[i][1]))
 				if not angle_sweep:
 					lines.append("RP 0 1 1 1000 90 %g 0 0"%angles[i])
@@ -797,16 +881,16 @@ class NecFileObject:
 		lines.append("EN")
 		return lines
 	
-	def runSweep(self, nec_input_lines, sweep, get_agt_scores=0, use_agt = None):
+	def runSweep(self, nec_input_lines, sweep, get_agt_scores=0, use_agt = None, id=""):
 		#print "Get agt score = %d"%get_agt_scores
-		import tempfile as tmp
+		#import tempfile as tmp
 		import subprocess as sp
 		import os
 		try:
 			os.mkdir(self.options.output)
-		except: pass
-		f, nec_input = tmp.mkstemp(".inp", "nec2", os.path.join(".",self.options.output) ,1)
-		os.close(f)
+		except : pass
+			
+		nec_input = os.path.join(".",self.options.output,"nec2_"+id+".inp")
 		agt_input = nec_input[0:-3]+"agt"
 
 		file = open(nec_input, "wt")
@@ -838,7 +922,7 @@ class NecFileObject:
 					f.write("\n")
 					f.close()
 					f = open(exe_input)
-					popen = sp.Popen(self.options.engine, stdin=f, stdout=open(os.devnull))
+					popen = sp.Popen(self.options.engine, stdin=f, stdout=open(os.devnull, "w"))
 					popen.wait()
 				finally:
 					f.close()
@@ -857,18 +941,21 @@ class NecFileObject:
 				f.write("\n")
 				f.close()
 				f = open(exe_input)
-				popen = sp.Popen(self.options.engine, stdin=f, stdout=open(os.devnull))
+				popen = sp.Popen(self.options.engine, stdin=f, stdout=open(os.devnull, "w"))
 				popen.wait()
 			finally:
 				f.close()
 		return (nec_output,agt)
 		
-	def runSweepT(self, nec_input_lines, sweep, number, result_map, result_lock, get_agt_scores=0, use_agt = None ):
+	def runSweepT(self, nec_input_lines, sweep, number, result_map, result_lock, get_agt_scores=0, use_agt = None, id=0 ):
+		r = None
 		try:
 			ua = None
 			if use_agt and number in use_agt:
 				ua = use_agt[number]
-			r = self.runSweep(nec_input_lines,sweep, get_agt_scores,ua)
+			r = self.runSweep(nec_input_lines,sweep, get_agt_scores,ua, str(id)+"_"+str(number))
+		except KeyboardInterrupt:
+			raise
 		except:
 			try:
 				result_lock.acquire()
@@ -918,7 +1005,7 @@ class NecFileObject:
 		
 		cores_per_sweep = [0]*len(sweeps)
 		while num_cores:
-			for i in xrange(len(sweeps)):
+			for i in range(len(sweeps)):
 				if cores_per_sweep[i]: continue
 				if freqs_per_sweep[i] < freqs_per_core:
 					cores_per_sweep[i] =  1 
@@ -929,14 +1016,14 @@ class NecFileObject:
 					cores_per_sweep[i] = 0 
 		
 			if not num_cores:
-				for i in xrange(len(sweeps)):
+				for i in range(len(sweeps)):
 					if cores_per_sweep[i]: continue
 					cores_per_sweep[i] = 1
 				break
 			if freqs_per_core == (total_freqs+.0)/num_cores:
 				smallest = -1
 				smallest_count = total_freqs+1
-				for i in xrange(len(sweeps)):
+				for i in range(len(sweeps)):
 					if cores_per_sweep[i]: continue
 					if freqs_per_sweep[i] < smallest_count:
 						smallest_count = freqs_per_sweep[i]
@@ -949,7 +1036,7 @@ class NecFileObject:
 			if not num_cores or not total_freqs: break
 			freqs_per_core = (total_freqs+.0)/num_cores
 
-		for i in xrange(len(sweeps)):
+		for i in range(len(sweeps)):
 			self.appendSweep(sweeps[i],cores_per_sweep[i],freqs_per_sweep[i], i)
 
 	def appendSweep(self, sweep, num_cores, sweep_size,sweepid):
@@ -980,7 +1067,7 @@ class NecFileObject:
 					freqs = sorted(sweep_freqs[0:num_freqs])
 					mid_freq = (sweep_freqs[num_freqs-1]+sweep_freqs[0])/2
 					agt_index = 0
-					for i in xrange(1,num_freqs):
+					for i in range(1,num_freqs):
 						if abs(sweep_freqs[i]-mid_freq) < abs(sweep_freqs[agt_index]-mid_freq):
 							agt_index = i
 					self.sweeps.append(Sweep( [(sweep_freqs[i],0,1) for i in range(num_freqs)], angles[0:num_freqs], sweep_freqs[agt_index],sweepid))
@@ -1009,28 +1096,42 @@ class NecFileObject:
 			pass
 
 
-	def runSweeps(self, get_agt_scores = 0, use_agt = None):
-		if self.options.cleanup:
-			self.cleanupOutput(self.options.cleanup)
+	def runSweeps(self, get_agt_scores = 0, use_agt = None, id = ""):
+		#if self.options.cleanup:
+		#	self.cleanupOutput(self.options.cleanup)
 		results={}
 		number=0
 		try:
 			nec_input_lines = self.necInputLines()
 		except:
-			if self.options.verbose: traceback.print_exc()
+			if not self.options.quiet: traceback.print_exc()
 			return
 
 		from threading import Lock, Thread
 		result_lock = Lock()
 		threads = []
-		for i in xrange(len(self.sweeps)):
+		for i in range(len(self.sweeps)-1):
 			sweep = self.sweeps[i]
-			threads.append(Thread(target=self.runSweepT, args=(nec_input_lines, sweep, number,results, result_lock,get_agt_scores,use_agt )))
+			threads.append(Thread(target=self.runSweepT, args=(nec_input_lines, sweep, number,results, result_lock,get_agt_scores,use_agt,id )))
 			threads[-1].start()
 			number = number+1
 
+		r = None
+		sweep = self.sweeps[-1]
+		try:
+			ua = None
+			if use_agt and number in use_agt:
+				ua = use_agt[number]
+			r = self.runSweep(nec_input_lines,sweep, get_agt_scores,ua, str(id)+"_"+str(number))
+		except KeyboardInterrupt:
+			raise
+		except:
+			traceback.print_exc()
 		for t in threads:
 			t.join()
+		#after the joins so we dont have to lock
+		if r : results[number]=(r[0],sweep.sweepid,r[1], number)
+			
 
 		r = []
 		for i in results.keys():
@@ -1044,19 +1145,19 @@ class NecFileObject:
 		h={}
 		v={}
 		if not chart_like:
-			print "Input file : %s"%self.options.input 
-			print "Freq sweeps: %s"%str(self.options.sweeps)
+			printOut("Input file : %s"%self.options.input )
+			printOut("Freq sweeps: %s"%str(self.options.sweeps) )
 			if self.autosegment[0]:
-				print "Autosegmentation: %d per %g"%self.autosegment
+				printOut("Autosegmentation: %d per %g"%self.autosegment)
 			else:
-				"Autosegmentation: NO"
-			print "\n"
+				printOut("Autosegmentation: NO")
+			printOut("\n")
 	
 			for r in range(len(results)):
 				nop = NOP(results[r][0], results[r][2], self.options)
 				if self.options.debug > 1:
 					for f in nop.frequencies:
-						print f.horizontal
+						printOut(f.horizontal)
 				h.update(nop.horizontalPattern())
 				v.update(nop.verticalPattern())
 				nop.printFreqs(r==0)
@@ -1072,21 +1173,21 @@ class NecFileObject:
 			for i in res: g+=(",%.2f"%i[1])
 			s = self.options.input+"_swr"
 			for i in res: s+=(",%.2f"%i[2])
-			print g
-			print s
+			printOut( g)
+			printOut( s)
 
 		if self.write_js_model:
-			print "Horizontal:"
-			print sorted(h.keys())
+			printOut( "Horizontal:")
+			printOut( sorted(h.keys()))
 			for i in sorted(h.keys()):
-				l = len(h[i])/2+1;
-				print "["+("%.2f,"*l)[0:-1]%tuple(h[i][0:l])+"],"
+				l = int(len(h[i])/2)+1;
+				printOut( "["+("%.2f,"*l)[0:-1]%tuple(h[i][0:l])+"],")
 
-			print "Vertical:"
-			print sorted(v.keys())
+			printOut( "Vertical:")
+			printOut( sorted(v.keys()))
 			for i in sorted(v.keys()):
-				l = len(v[i])/2+1;
-				print "["+("%.2f,"*l)[0:-1]%tuple(v[i][0:l])+"],"
+				l = int(len(v[i])/2)+1;
+				printOut( "["+("%.2f,"*l)[0:-1]%tuple(v[i][0:l])+"],")
 				
 
 
@@ -1137,7 +1238,7 @@ class OptionParser(optparse.OptionParser):
 		while options.backward_dir > 360:
 			options.backward_dir-=360
 		if options.sweeps:
-			options.sweeps = map(eval,options.sweeps)
+			options.sweeps = list(map(eval,options.sweeps))
 		return (options, args)
 
 def optionParser():

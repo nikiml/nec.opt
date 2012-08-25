@@ -1,4 +1,5 @@
-from demathutils import mean_value, min_value
+from nec.demathutils import mean_value, min_value
+from nec.eval import printOut
 
 def floatOrNone(s):
 	if s== "None":return None
@@ -9,7 +10,7 @@ def parseLogFile(filename, np, population_member=0, number_of_lines=None):
 	lines = f.readlines()
 	f.close()
 	i=-1
-	for j in xrange(len(lines)):
+	for j in range(len(lines)):
 		if lines[j].find("Score")!=-1:
 			i=j
 	
@@ -37,10 +38,10 @@ def parseLogFile(filename, np, population_member=0, number_of_lines=None):
 		score = float(ln[0])
 		if not scores or score < scores[-1]:
 			scores.append(score)
-			new_gen = map(floatOrNone, ln[1:score_index])
+			new_gen = list(map(floatOrNone, ln[1:score_index]))
 			if population:
 				crs = 0
-				for i in xrange(len(population[-1])):
+				for i in range(len(population[-1])):
 					if population[-1][i]!=new_gen[i]:
 						crs+=1
 				cr_stats.append(crs)
@@ -60,15 +61,15 @@ if __name__ == "__main__":
 	opts, args = options.parse_args()
 	p = parseLogFile(opts.log_file, opts.de_np, opts.member, opts.number_of_lines)
 	if not p:
-		print "Failed to extract history"
+		printOut( "Failed to extract history")
 	else:
 		vars,scores, population, cr_stats = p
-		print ((len(vars)+1)*"%9s ")%tuple(["Score"]+vars)
+		printOut( ((len(vars)+1)*"%9s ")%tuple(["Score"]+vars))
 		for i in range(len(scores)):
 			if opts.cr_stats:
-				print ( (len(vars)+1)*"%3.5f "+" cr=%d")%tuple([scores[i]]+population[i]+[cr_stats[i]])
+				printOut( ( (len(vars)+1)*"%3.5f "+" cr=%d")%tuple([scores[i]]+population[i]+[cr_stats[i]]))
 			else:
-				print ( (len(vars)+1)*"%3.5f ")%tuple([scores[i]]+population[i])
+				printOut( ( (len(vars)+1)*"%3.5f ")%tuple([scores[i]]+population[i]) )
 
 
 	

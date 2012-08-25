@@ -53,9 +53,9 @@ derivative works thereof, in binary and source code form.
 #from scitbx.array_family import flex
 #from stdlib import random
 import random
-from itertools import imap
 import operator
-from demathutils import *
+from nec.demathutils import *
+import sys
 
   
 def applyDeltaAndOffset(seq, delta, offset):
@@ -107,7 +107,7 @@ data members:
                population_size=50,
                f=0.8,
                cr=0.9,
-               eps=1e-2,
+               eps=1e-4,
                n_cross=1,
                max_iter=10000,
                monitor_cycle=100,
@@ -145,7 +145,7 @@ data members:
     if self.show_progress:
       self.evaluator.print_status(
             min_value(self.scores),
-            mean_value(map(float,self.scores)),
+            mean_value(list(map(float,self.scores))),
             self.population[ min_index( self.scores ) ],
             'Final',0)
 
@@ -154,7 +154,7 @@ data members:
     # initialise the population please
     self.make_random_population()
     converged = False
-    monitor_score = mean_value( map(float,self.scores ))
+    monitor_score = mean_value(list(map(float,self.scores )))
     count = 0
     while not converged:
       improved = self.evolve()
@@ -166,20 +166,19 @@ data members:
           # the function signature should be (min_target, mean_target, best vector)
           self.evaluator.print_status(
             min_value(self.scores),
-            mean_value(map(float,self.scores)),
+            mean_value(list(map(float,self.scores))),
             self.population[ min_index( self.scores ) ],
             count, improved)
 
       count += 1
       if count%self.monitor_cycle==0:
-        if (monitor_score-mean_value(map(float,self.scores)) ) < self.eps:
+        if (monitor_score-mean_value(list(map(float,self.scores))) ) < self.eps:
           converged = True
         else:
-         monitor_score = mean_value(map(float,self.scores))
-      rd = (mean_value(map(float,self.scores)) - float(min_value(self.scores)) )
+         monitor_score = mean_value(list(map(float,self.scores)))
+      rd = (mean_value(list(map(float,self.scores))) - float(min_value(self.scores)) )
       rd = rd*rd/(float(min_value(self.scores))*float(min_value(self.scores)) + self.eps*self.eps )
       if ( rd < self.eps*self.eps ):
-        print "converged by mean to min score difference rd=%g"%rd
         converged = True
 
 
@@ -193,9 +192,9 @@ data members:
 	    self.scores = self.population_size*[1000.0]
 	    self.score_population()
 	    return
-    for ii in xrange(self.population_size):
+    for ii in range(self.population_size):
       self.population.append( self.vector_length*[0.0] )
-    for ii in xrange(self.vector_length):
+    for ii in range(self.vector_length):
       delta  = self.evaluator.domain[ii][1]-self.evaluator.domain[ii][0]
       offset = self.evaluator.domain[ii][0]
       random_values = random_double(self.population_size)
@@ -212,14 +211,14 @@ data members:
     self.score_population()
 
   def score_population(self):
-    for vector,ii in zip(self.population,xrange(self.population_size)):
-      tmp_score = self.evaluator.target(vector)
+    for vector,ii in zip(self.population,range(self.population_size)):
+      tmp_score = self.evaluator.target(vector, ii)
       self.scores[ii]=tmp_score
 
   def evolve(self):
     new_population=[[]]*self.population_size
     improved = 0
-    for ii in xrange(self.population_size):
+    for ii in range(self.population_size):
       rnd = random_double(self.population_size-1)
       permut = sort_permutation(rnd)
       # make parent indices
@@ -239,13 +238,13 @@ data members:
       use_f = self.f
       if self.dither!=.0:
 	      use_f = use_f+self.dither*(random.random()-.5)
-      vi = list(imap(operator.add, x1 , imap(lambda x: use_f*x, imap(operator.sub, x2,x3)))) #v1 = x1 + self.f*(x2-x3)
+      vi = list(map(operator.add, x1 , map(lambda x: use_f*x, map(operator.sub, x2,x3)))) #v1 = x1 + self.f*(x2-x3)
       # prepare the offspring vector pleaseself.atanhTransform(self.x)
       rnd = random_double(self.vector_length)
       permut = sort_permutation(rnd)
       test_vector = list(self.population[ii]) #self.population[ii].deep_copy()
       # first the parameters that sure cross over
-      for jj in xrange( self.vector_length  ):
+      for jj in range( self.vector_length  ):
         if self.evaluator.enforce_domain_limits:
           if vi[ permut[jj] ] > self.evaluator.domain[ permut[jj] ][1]:
             vi[ permut[jj] ] = (self.evaluator.domain[ permut[jj] ][1]+test_vector[ permut[jj] ])/2
@@ -257,34 +256,26 @@ data members:
           if (rnd[jj]<self.cr):
             test_vector[ permut[jj] ] = vi[ permut[jj] ]
       # get the score please
-      test_score = self.evaluator.testMemberAgainstScore(test_vector, self.scores[ii])
+      test_score = self.evaluator.testMemberAgainstScore(test_vector, self.scores[ii],ii)
       #self.evaluator.target( test_vector )
       # check if the score if lower
       if test_score is not None:
         self.scores[ii] = test_score
         new_population[ii] = test_vector
-	improved+=1
-    for ii in xrange(self.population_size):
+        improved+=1
+    for ii in range(self.population_size):
       if new_population[ii]:
         self.population[ii]=new_population[ii]
     if self.plugin:
-      print "Postevolving ..."
       res = self.plugin.postEvolve(self)
       if res:
         for r in res:
-          print "Plugin improved member %d from %g to %g"%(r[0], float(self.scores[r[0]]), r[2])
           self.population[r[0]] = r[1]
           self.scores[r[0]] = r[2]
     self.best_score = float(min_value( self.scores ))
     self.best_vector = self.population[ min_index( self.scores ) ]
     self.evaluator.x = self.best_vector
     return improved
-
-  def show_population(self):
-    print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
-    for vec in self.population:
-      print list(vec)
-    print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 
 
 class DESQIPlugin:
@@ -312,7 +303,7 @@ class DESQIPlugin:
       f1 = float(de.scores[i1])
       f2 = float(de.scores[i2])
       f3 = float(de.scores[i3])
-      for i in xrange(de.vector_length):
+      for i in range(de.vector_length):
         test_vector[i] = .5*( (x1[i]*x1[i]-x2[i]*x2[i])*f3 + (x2[i]*x2[i] - x3[i]*x3[i])*f1 + (x3[i]*x3[i] - x1[i]*x1[i])*f2) / ( (x1[i]-x2[i])*f1 + (x2[i] - x3[i])*f1 + (x3[i] - x1[i])*f2)
       test_score = de.evaluator.target( test_vector )
       if test_score < de.scores[w]:
@@ -413,18 +404,18 @@ class test_rosenbrock_function(object):
 		return result
 	
 	def print_status(self, mins,means,vector,txt):
-		print mins, means, list(vector)
+		sys.stdout.write("MinScore=%g, MeanScore=%g, Solution = %s\n"%mins, means, str(list(vector)) )
 	def initialPopulation(self):
 		return [], []
 	def iterationCallback(self, count,population,scores):
-		print count
+		sys.stdout.write(str(count)+"\n")
 		pass
 	
 	
 def run():
 	random.seed(0)
 	test_rosenbrock_function()
-	print "OK"
+	sys.stdout.write("OK\n")
 	
 	
 if __name__ == "__main__":

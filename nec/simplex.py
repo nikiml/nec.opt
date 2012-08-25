@@ -1,5 +1,6 @@
 from demathutils import *
 import operator
+from nec.eval import printOut
 
 def wrap_function(function):
     ncalls = [0]
@@ -177,18 +178,18 @@ def fmin(evaluator, xtol=1e-4, ftol=1e-4, maxiter=None, maxfun=None,
     if fcalls[0] >= maxfun:
         warnflag = 1
         if disp:
-            print "Warning: Maximum number of function evaluations has "\
-                  "been exceeded."
+            printOut("Warning: Maximum number of function evaluations has "\
+                  "been exceeded.")
     elif iterations >= maxiter:
         warnflag = 2
         if disp:
-            print "Warning: Maximum number of iterations has been exceeded"
+            printOut("Warning: Maximum number of iterations has been exceeded")
     else:
         if disp:
-            print "Optimization terminated successfully."
-            print "         Current function value: %f" % fval
-            print "         Iterations: %d" % iterations
-            print "         Function evaluations: %d" % fcalls[0]
+            printOut("Optimization terminated successfully.")
+            printOut("         Current function value: %f" % fval)
+            printOut("         Iterations: %d" % iterations)
+            printOut("         Function evaluations: %d" % fcalls[0])
 
 
     if full_output:

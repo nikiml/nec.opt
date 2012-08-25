@@ -4,21 +4,21 @@ import math
 
 def min_index(seq):
   res = 0
-  for i in xrange(len(seq)):
+  for i in range(len(seq)):
     if seq[i]<seq[res]:
       res = i
   return res
 
 def max_index(seq):
   res = 0
-  for i in xrange(len(seq)):
+  for i in range(len(seq)):
     if seq[i]>seq[res]:
       res = i
   return res
 
 def mean_value(seq):
   res = seq[0]
-  for i in xrange(1, len(seq)):
+  for i in range(1, len(seq)):
     res = res+seq[i]
   return res / len(seq)
 
@@ -35,8 +35,8 @@ def random_double(size):
   return res
 
 def sort_permutation(seq):
-  tmp = zip(seq,xrange(len(seq)))
-  s = sorted(tmp, lambda x,y: cmp(x[0],y[0]))
+  tmp = zip(seq,range(len(seq)))
+  s = sorted(tmp)
   res = []
   for i in s: res.append(i[1])
   return res
@@ -87,7 +87,7 @@ def v3rotAx(angle, coords, axis):
 	s = math.sin(angle)
 	_1=(axis+1)%3
 	_2=(axis+2)%3
-	for i in range(len(coords)/3):
+	for i in range(int(len(coords)/3)):
 		y = coords[3*i+_1]
 		z = coords[3*i+_2]
 		coords[3*i+_1] = c*y-s*z
