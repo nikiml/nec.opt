@@ -1,5 +1,7 @@
 // copyright 2010 Nikolay Mladenov
 /*global window, Raphael, alert, $V, $M, Vector, Matrix, $ */
+
+//some pieces of code I collected from the internet
 if (!Array.prototype.indexOf)
 {
 	Array.prototype.indexOf = function (elt /*, from*/)
@@ -79,7 +81,10 @@ function getInternetExplorerVersion() {
     }
     return rv;
 }
-		
+
+
+//antenna.js
+	
 function r_line(r, x1,y1,x2,y2 )
 {
 	return r.path("M"+x1+" "+y1+"L"+x2+" "+y2);
