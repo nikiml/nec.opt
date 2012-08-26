@@ -625,8 +625,7 @@ def optimize(options):
 			#	de_plugin = DE.DESQIPlugin()
 			optimiser = DE.differential_evolution_optimizer(evaluator, population_size = options.de_np, f = options.de_f, cr = options.de_cr, show_progress=1, insert_solution_vector=ins_sol_vec, max_iter=options.max_iter, dither=options.de_dither)
 		else:
-			#from scipy import optimize
-			import simplex
+			from nec import simplex
 			if not options.quiet: printOut( "N=%d"%len(evaluator.x))
 			evaluator.x = simplex.fmin(evaluator, ftol=options.local_search_tolerance, xtol=options.local_search_tolerance, maxfun=options.max_iter)
 		#evaluator.nec_file.writeNecInput("final.nec")
