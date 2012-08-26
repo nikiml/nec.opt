@@ -703,11 +703,11 @@ class NecFileObject:
 			fn = lambda x:self.formatNumber(x,0)
 			if ln[0].strip() != "GW":
 				if ln[0].strip() not in skiptags:
-					if ln[0].strip() != "CM":
+					try:
 						sline = list(map( self.evalToken , ln[1:]))
 						sline = map(fn, sline)
 						lines.append(ln[0]+" "+" ".join(sline))
-					else:
+					except:
 						lines.append(" ".join(ln))
 				if ln[0].strip() == "GX":
 					i1 = int(self.evalToken(ln[1]))
