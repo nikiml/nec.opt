@@ -48,7 +48,10 @@ def apply_permutation(seq, permut):
 
 def averageArrays(arrays):
   N = len(arrays[0])
-  res = reduce(lambda x,y : map(operator.add, x,y), arrays,[0.0]*N)
+  res = [0.0]*N
+  for arr in arrays:
+    for i in range(N):
+      res[i]+=arr[i]
   return list(map(lambda x: x/N, res))
 
 def linearCombine( c1, a1, c2, a2):
