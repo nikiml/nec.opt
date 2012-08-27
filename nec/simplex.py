@@ -107,9 +107,9 @@ def fmin(evaluator, xtol=1e-4, ftol=1e-4, maxiter=None, maxfun=None,
      
     while (fcalls[0] < maxfun and iterations < maxiter):
         sim_size = max(map(lambda x : max(map(abs,map(operator.sub, x, sim[0]))),sim[1:]))
-	#print "The simplex size is %.6g(tol=%.6g)"%(sim_size,xtol)
-	fsim_size = max( map(lambda x: abs(x-fsim[0]), fsim[1:]))
-	#print "The simplex image size is %.6g(tol=%.6g)"%(fsim_size, ftol)
+        #print "The simplex size is %.6g(tol=%.6g)"%(sim_size,xtol)
+        fsim_size = max( map(lambda x: abs(x-fsim[0]), fsim[1:]))
+        #print "The simplex image size is %.6g(tol=%.6g)"%(fsim_size, ftol)
         if ( sim_size <= xtol ) \
            and fsim_size <=ftol:
            break
