@@ -1,6 +1,6 @@
 from distutils.core import setup
 setup(name='nec',
-      version='0.10.77',
+      version='0.10.78',
       author='Nikolay Mladenov',
       author_email='Nikolay dot Mladenov at gmail dot com',
       packages=['nec'],

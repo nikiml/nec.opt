@@ -1,4 +1,4 @@
-from demathutils import *
+from nec.demathutils import *
 import operator
 from nec.eval import printOut
 
