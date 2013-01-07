@@ -3,23 +3,15 @@
 
 import sys, traceback, os, pprint
 from nec import necmath
-from nec.demathutils import v3add, v3mul, v3sub, v3dot, v3cross, v3len, v3unit, v3rotx, v3roty, v3rotz
+from nec.wire_structure import WireStructure
+from nec.print_out import printOut
+from nec.output_parser import FrequencyData, NecOutputParser
+from nec.html import jsModelFromLines, HtmlOutput
 
 output = "output"
 input = "input.nec"
 autosegmentation=10
 ncores=4
-
-def printOut(s):
-	if type(s)!=type(''):
-		s = str(s)
-	sys.stdout.write(s)
-	sys.stdout.write('\n')
-	sys.stdout.flush()
-
-class GeometryError (RuntimeError):
-	def __init__(self, msg):
-		RuntimeError.__init__(self,msg)
 
 class Sweep:
 	def __init__(self, ranges, angles, agt_freq,sweepid):
@@ -31,265 +23,19 @@ class Sweep:
 		return "{"+str(self.ranges)+", agt freq "+str(self.agt_freq)+"}"
 	def __repr__(self):
 		return "{"+str(self.ranges)+", agt freq "+str(self.agt_freq)+"}"
-
-
-class FrequencyData:
-	def __init__(self, char_impedance):
-		self.freq = 0
-		self.real = 0
-		self.imag = 0
-		self.gain = 0
-		self.char_impedance = char_impedance
-		self.angle = 0
-		self.AGT = 1.0
-		self.agt = 0
-		self.horizontal = {}
-		self.vertical = {}
-		self.sorted_horizontal_angles = []
-		self.input_power = 0
-		self.radiated_power = 0
-		self.structure_loss = 0
-		self.network_loss = 0
-		self.efficiency = 0
-
-	def swr(self):
-		rc = necmath.sqrt( \
-			(necmath.pow(self.real-self.char_impedance,2)+necmath.pow(self.imag,2)) \
-			/ (necmath.pow(self.real+self.char_impedance,2)+necmath.pow(self.imag,2)) \
-			)
-		return (1+rc)/(1-rc)
-	def valid(self):
-		try: 
-			self.swr()
-			return 1
-		except:
-			return 0
-	def net(self, g = None):
-		if g is None:
-			g = self.gain
-		tmp = 4*max(self.real,.0001)*self.char_impedance/(necmath.pow(self.real+self.char_impedance,2)+necmath.pow(self.imag,2))
-		return g+10*necmath.log10(tmp)
-
-	def horizontalNet(self, phi):
-		return self.net(self.horizontalRaw(phi))
-
-	def horizontalRaw(self, phi):
-		if phi in self.horizontal: return self.horizontal[phi]
-		#sys.stderr.write("WARNING: gain for angle %.1f not calculated - using approximation\n"%phi)
-		#sys.stderr.write(str(self.horizontal)+"\n")
-		if not self.sorted_horizontal_angles:
-			self.sorted_horizontal_angles = sorted(self.horizontal.keys())
-		if not self.sorted_horizontal_angles:
-			raise RuntimeError("gain not calculated")
-		diff = phi-self.sorted_horizontal_angles[0]
-		index = 0
-		for i in range(1,len(self.sorted_horizontal_angles)):
-			d = phi-self.sorted_horizontal_angles[i]
-			if abs(d) < abs(diff):
-				diff = d
-				index = i
-		if index !=0 and diff < 0:
-			return (self.horizontal[self.sorted_horizontal_angles[index-1]]*(phi - self.sorted_horizontal_angles[index-1])		\
-					+ self.horizontal[self.sorted_horizontal_angles[index]]*( self.sorted_horizontal_angles[index] - phi) )	\
-					/ (self.sorted_horizontal_angles[index]-self.sorted_horizontal_angles[index-1])
-		if index !=len(self.sorted_horizontal_angles)-1 and diff > 0:
-			return (self.horizontal[self.sorted_horizontal_angles[index+1]]*(self.sorted_horizontal_angles[index+1]-phi)		\
-					+ self.horizontal[self.sorted_horizontal_angles[index]]*(phi - self.sorted_horizontal_angles[index]) )	\
-					/ (self.sorted_horizontal_angles[index+1]-self.sorted_horizontal_angles[index])
-		return self.horizontal[self.sorted_horizontal_angles[index]]
-
-	def verticalNet(self, theta):
-		return self.net(self.vertical[theta])
-		
-	def __str__(self):
-		return "%d Mhz - raw(%f), net(%f), swr(%f), real(%f), imag(%f)"%(int(self.freq), self.gain, self.net(), self.swr(), self.real, self.imag)
-
-	def forwardGain(self, forward_dir = 0):
-		return self.horizontalNet(forward_dir)
-
-	def forwardRaw(self, forward_dir = 0):
-		return self.horizontalRaw(forward_dir)
-
-	def backwardGain(self, backward_dir = 0):
-		return self.horizontalNet(backward_dir)
-
-	def backwardRaw(self, backward_dir = 0):
-		return self.horizontalRaw(backward_dir)
-
-	def rearGain(self, rear_angle, backward_dir = 180):
-		rear = [self.horizontalNet(phi) for phi in self.horizontal.keys() if phi>=backward_dir-rear_angle/2. and  phi<=backward_dir+rear_angle/2.]
-		if not rear:
-			return None
-		return max(rear)
-
-		
-
-
-class NecOutputParser:
-	def __init__(self, output, agt, options):
-		self.frequencies = []
-		self.AGT = agt
-		self.agt = 10*necmath.log10(agt)
-		self.options = options
-		if output:
-			self.parse(output)
-
-	def printFreqs(self, header=1):
-		if not self.options.frequency_data:
-			if header: 
-				printOut( "%6s %8s %8s %7s %7s %7s %8s %8s %12s"%("Freq", "RawGain", "NetGain", "SWR", "F/R", "F/B", "Real", "Imag", "AGT(corr)"))
-				printOut( "==================================================================================")
-			#if self.agt!=0:
-			#	printOut( "AGT=%g dB"%self.agt)
-			for i in self.frequencies:
-				if not i.valid():
-					printOut( "%6.1f - invalid result"%i.freq)
-				else:
-					rear = "n/a"
-					back = "n/a"
-					raw = "n/a"
-					net = "n/a"
-					if self.options.calc.gain:
-						raw = i.horizontalRaw(self.options.forward_dir)
-						net = i.net(raw)
-						if self.options.calc.f2r:
-							rear = i.rearGain(self.options.rear_angle,self.options.backward_dir)
-							rear = "% 7.3f"%(net-rear)
-						if self.options.calc.f2b:
-							back = i.backwardGain(self.options.backward_dir)
-							back = "% 7.3f"%(net-back)
-						raw = "% 8.3f"%raw
-						net = "% 8.3f"%net
-
-					printOut( "% 6.1f % 8s % 8s % 7.3f % 7s % 7s % 8.2f % 8.2f %5.2f(% 6.3f)"%	\
-							(i.freq, raw, net,i.swr(), rear, back, i.real, i.imag, i.AGT, i.agt))
-
-		else:
-			if header: 
-				printOut( "%6s %7s %6s %8s %8s %7s %8s %8s %7s %12s"%("Freq", "Target", "Angle", "RawGain", "NetGain", "SWR", "Real", "Imag", "Diff", "AGT(corr)"))
-				printOut( "=========================================================================================")
-			for i in self.frequencies:
-				if not i.valid():
-					printOut( "%6.4g - invalid result"%i.freq)
-				else:
-					target = self.options.frequency_data[i.freq][1]
-					printOut( "% 6.1f % 7.2f % 6.1f % 8.3f % 8.3f % 7.3f % 8.2f % 8.2f % 7.3f %5.2f(% 6.3f)"%(i.freq, target, i.angle, i.gain, i.net(),i.swr(), i.real, i.imag, target-i.net(), i.AGT, i.agt))
-	def getGainSWRChartData(self):
-		res = []
-		for i in self.frequencies:
-			res.append((int(i.freq), i.net(),i.swr()))
-		return res
-	def horizontalPattern(self):
-		res = {}
-		for f in self.frequencies:
-			res[f.freq] = [f.horizontalNet(phi) for phi in sorted(f.horizontal.keys())]
-		
-		return res
-
-	def verticalPattern(self):
-		res = {}
-		for f in self.frequencies:
-			res[f.freq] = [f.verticalNet(theta) for theta in sorted(f.vertical.keys())]
-		
-		return res
-
-	def parse(self, output):
-		file = open(output, "rt")
-		try : 
-			lines = file.readlines()
-		finally:
-			file.close()
-		i=0
-		freq = 0
-		real = 0
-		imag = 0
-		while i < len(lines):
-			ln = lines[i].strip()
-			if ln == "- - - - - - FREQUENCY - - - - - -":
-				i = i+2
-				freq = float(lines[i].strip()[10:-4])
-#				if not len(self.frequencies) or self.frequencies[-1].valid():
-#					self.frequencies.append(FrequencyData(self.char_impedance))
-#				self.frequencies[-1].freq = freq
-			elif ln == "- - - ANTENNA INPUT PARAMETERS - - -":
-				i=i+4
-				real = float(lines[i][60:72]) # at least one linux engine has calculated negative real impedance...
-				if real < 0:
-					raise ValueError("engine reported negative real impedance for frequency %.1f"%freq)
-				imag = float(lines[i][72:84])
-#				self.frequencies[-1].real = float(lines[i][60:72])
-#				self.frequencies[-1].imag = float(lines[i][72:84])
-				fd = FrequencyData(self.options.char_impedance)
-				fd.real = real
-				fd.imag = imag
-				self.frequencies.append(fd)
-				fd.freq = freq
-				fd.AGT = self.AGT
-				fd.agt = self.agt
-
-			elif ln == "- - - POWER BUDGET - - -":
-				while i < len(lines):
-					i+=1
-					if len(lines[i]) < 60: continue
-					if lines[0][43: 57] == "INPUT POWER   ": fd.input_power = float(lines[i][58:69])
-					elif lines[0][43: 57] == "RADIATED POWER": fd.radiated_power = float(lines[i][58:69])
-					elif lines[0][43: 57] == "STRUCTURE LOSS": fd.structure_loss = float(lines[i][58:69])
-					elif lines[0][43: 57] == "NETWORK LOSS  ": fd.network_loss = float(lines[i][58:69])
-					elif lines[0][43: 57] == "EFFICIENCY    ": 
-						fd.efficiency = float(lines[i][58:65])
-						break
-					else: 
-						break
-
-				if fd.radiated_power < 0:
-					raise ValueError("engine reported negative radiated power for frequency %.1f"%freq)
-			elif ln =="- - - RADIATION PATTERNS - - -":
-				i=i+5
-				angle = self.options.forward_dir
-#				freq = self.frequencies[-1].freq
-				if freq in self.options.frequency_data.keys():
-					angle = self.options.frequency_data[freq][0]
-					while angle <0:angle+=360
-					while angle >360:angle-=360
-				while len(lines[i].strip()):
-					ln = lines[i]
-					if ln[0]=="*" or len(ln) < 8 :break
-					try:
-						#theta = float(ln[0:8])
-						#phi = float(ln[8:17])
-						#gain = float(ln[28:36])-self.agt
-						ln = ln.split()
-						theta = float(ln[0])
-						phi = float(ln[1])
-						gain = float(ln[2+self.options.gain_type])-self.agt
-						if theta < 0 : 
-							theta = -theta
-							phi = (phi+540)
-						phi = phi%360
-						if abs(theta)==90 :
-							fd.horizontal[phi]=gain
-						if phi == 0:
-							fd.vertical[theta]=gain
-						if theta==90 and (abs(phi-angle)<=self.options.angle_step*.5) or theta==-90 and (abs(phi-180-angle)<=self.options.angle_step*.5):
-							fd.gain = gain
-							fd.angle = angle
-						i = i+1
-					except:
-						break
-			i = i+1
-		if self.options.frequency_data:
-			freqs = []
-			for f in self.frequencies:
-				if f.freq in self.options.frequency_data.keys():
-					freqs.append(f)
-			self.frequencies = freqs
+	def midFrequency(self):
+		total = 0
+		for r in self.ranges:
+			total += r[0] + r[1]*(r[2]-1)/2
+		if not total: return 0
+		return total / len(self.ranges)
 
 class NecFileObject:
 	def __init__(self, options):
 		self.options = options
+		self.wire_structure = WireStructure(options)
 		self.vars = {}
 		self.min_max = {}
-		self.dependent_vars = []
 		self.lines=[]
 		self.varlines=[]
 		self.paramlines={}
@@ -304,6 +50,7 @@ class NecFileObject:
 		try:self.write_js_model = options.js_model
 		except AttributeError: self.write_js_model=0
 		if self.options.input:
+			self.html_output = HtmlOutput(self.options.input)
 			self.readSource(self.options.input)
 			try:
 				if self.options.param_values_file:
@@ -335,14 +82,187 @@ class NecFileObject:
 		else:
 			exec(ln, g, l)
 
+	class TagRecorder:
+		def addTransformation(self, line):
+			inc = int(self.parser.evalToken(line[1]))
+			new = line[2].strip()
+			if line[0]=="GX": 
+				new = (1+int(new[0]))*(1+int(new[1]))*(1+int(new[2]))
+			else:
+				new = int(self.parser.evalToken(new))
+				if line[0]=="GR": new-=1
+			self.update(new, inc)
+
+	class TagSegmentation(TagRecorder):
+		def __init__(self, parser):
+			self.tag_segmentation = {}
+			self.fixed_segmentation = []
+			self.parser = parser
+		def addWire(self, line, varlineno):
+			tag = int(line[1])
+			segments = int(self.parser.evalToken(line[2]))
+			if tag not in self.tag_segmentation:
+				self.tag_segmentation[tag] = [segments]
+			else:
+				self.tag_segmentation[tag].append(segments)
+			if line[2][0] == "+":
+				self.fixed_segmentation.append(varlineno)
+		def update(self, new, inc):
+			ts = {}
+			for i in range(0,new):
+				for t in self.tag_segmentation.keys():
+					ts[t+i*inc] = list(self.tag_segmentation[t])
+			self.tag_segmentation.update(ts)
+		def tagSegments(self, tag, ref_card):
+			if tag not in self.tag_segmentation.keys():
+				raise RuntimeError("Invalid tag reference %d in %s card" %(tag,ref_card))
+			if len(self.tag_segmentation[tag])>1:
+				raise RuntimeError("Ambiguous tag reference %d in %s card" %(tag,ref_card))
+			return self.tag_segmentation[tag][0]
+
+		def autoSegment(self, varlineno):
+			return varlineno not in self.fixed_segmentation
+
+	class TagRadii(TagRecorder):
+		def __init__(self):
+			self.tag_rad = {}
+		def addWire(self, tag, rad):
+			tag = int(tag)
+			rad = rad
+			if tag not in self.tag_rad:
+				self.tag_rad[tag] = [rad]
+			else:
+				self.tag_rad[tag] += [rad]
+		def update(self, new, inc):
+			tr = {}
+			for i in range(0,new):
+				for t in self.tag_rad.keys():
+					tr[t+i*inc] = list(self.tag_rad[t])
+			self.tag_rad.update(tr)
+		def tagRadius(self, tag, ref_card):
+			if not tag:
+				for k in self.tag_rad.keys():
+					return self.tag_rad[k][0]
+			if tag not in self.tag_rad.keys():
+				raise RuntimeError("Invalid tag reference %d in %s card" %(tag,ref_card))
+			return self.tag_rad[tag][0]
+
+
+
+	class SegRef:
+		def __init__(self, varlineno, lineno, tokenno, segno, segcount):
+			self.varline_no = varlineno
+			self.line_no = lineno 
+			self.token_no = tokenno 
+			self.seg_no = segno
+			self.seg_count = segcount
+		def isStart(self):
+			return self.seg_no==1
+		def isEnd(self):
+			return self.seg_no==self.seg_count
+		def isMid(self):
+			return 2*self.seg_no==self.seg_count+1
+
+		def newSegNo(self, seg_count):
+			if self.isMid():
+				return (seg_count+1)/2
+			if self.isStart():
+				return 0
+			if self.isEnd():
+				return seg_count
+			return round( (self.seg_no-.5)/self.seg_count*seg_count +.5)
+
+	def checkNonZeroTag(self, tag, card):
+		if not tag: raise RuntimeError("Tag 0 is not supported in %s card"%card)
+
+
+	def parseSYLine(self, ln):
+		if self.options.debug >1: sys.stderr.write("debug: \tParsing line: \"%s\"\n"%ln)
+		try:
+			d = self.evalVarLine(ln[3:].strip())
+			if self.options.debug: 
+				for dk in d.keys(): sys.stderr.write("debug: \tAdded independent parameter \"%s\"\n"%dk)
+				if self.options.debug>1: sys.stderr.write("debug: \t\tFull comment = \"%s\"\n"%comment)
+			self.vars.update(d)
+			for dk in d.keys(): self.paramlines[dk]=i
+			try:
+				#strip the real comment from the comment
+				comment_pos = comment.find("'")
+				if comment_pos!=-1:
+					comment = comment[0:comment_pos].strip()
+				if self.options.debug>1: 
+					sys.stderr.write("debug: \t\tLimits comment = \"%s\"\n"%comment)
+				min, max = eval(comment)
+				if min <= max:
+					for dk in d.keys(): self.min_max[dk]=(float(min),float(max))
+				else:
+					for dk in d.keys(): self.min_max[dk]=(float(max),float(min))
+				if self.options.debug: sys.stderr.write("debug: \t\tlimits(%.3g, %.3g)\n"%(float(min), float(max)))
+			except:
+				if self.options.debug>1: 
+					for dk in d.keys(): sys.stderr.write("debug: \tNo limits found for parameter \"%s\"\n"%dk)
+				pass
+			self.globals.update(d)
+		except:
+			if self.options.debug: sys.stderr.write("debug: \tAdded dependent parameter \"%s\"\n"%ln[3:].strip())
+			try: self.evalVarLine(ln[3:].strip(),necmath.__dict__, self.globals)
+			except:
+				traceback.print_exc()
+				sys.stderr.write( "failed parsing '%s'\n"%(d))
+				raise
+	def parseEXLine(self, varline, varlineno, lineno):
+		tag = int(varline[2])
+		seg = int(self.evalToken(varline[3]))
+		segments = self.tag_segmentation.tagSegments(tag, varline[0])
+		seg_ref = NecFileObject.SegRef(varlineno, lineno, 3, seg, segments)
+		if tag not in self.source_tags:
+			self.source_tags[tag]=[seg_ref]
+		else:
+			self.source_tags[tag].append(seg_ref)
+
+	def parseNTOrTLLine(self, varline, varlineno, lineno):
+		tag = int(varline[1])
+		self.checkNonZeroTag(tag,varline[0])
+		seg = int(self.evalToken(varline[2]))
+		segments = self.tag_segmentation.tagSegments(tag, varline[0])
+		seg_ref = NecFileObject.SegRef(varlineno, lineno, 2, seg, segments)
+		if tag not in self.source_tags:
+			self.source_tags[tag]=[seg_ref]
+		else:
+			self.source_tags[tag].append(seg_ref)
+		tag = int(varline[3])
+		self.checkNonZeroTag(tag,varline[0])
+		seg = int(self.evalToken(varline[4]))
+		segments = self.tag_segmentation.tagSegments(tag, varline[0])
+		seg_ref = NecFileObject.SegRef(varlineno, lieno, 4, seg, segments)
+		if tag not in self.source_tags:
+			self.source_tags[tag]=[seg_ref]
+		else:
+			self.source_tags[tag].append(seg_ref)
+
+	def parseLDLine(self, varline, varlineno, lineno):
+		tag = int(varline[2])
+		seg1 = int(self.evalToken(varline[3]))
+		seg2 = int(self.evalToken(varline[4]))
+		if seg1: 
+			self.checkNonZeroTag(tag,varline[0])
+			segments = self.tag_segmentation.tagSegments(tag, varline[0])
+			seg1_ref = NecFileObject.SegRef(varlineno, lineno, 3, seg1, segments)
+			seg2_ref = NecFileObject.SegRef(varlineno, lineno, 4, seg2, segments)
+			if tag not in self.source_tags:
+				self.source_tags[tag]=[seg1_ref,seg2_ref]
+			else:
+				self.source_tags[tag]+=[seg1_ref,seg2_ref]
 
 	def parse(self):		
 		if self.options.debug: sys.stderr.write("debug: Parsing input\n")
 		self.vars = {}
-		self.dependent_vars = []
+		self.globals={}
 		self.varlines=[]
 		self.source_tags={}
 		self.comments = []
+		self.fixed_segmentation = []
+		self.tag_segmentation = NecFileObject.TagSegmentation(self)
 		for i in range(len(self.lines)):
 			ln = self.lines[i].strip('\n')
 			comment_pos = ln.find("'")
@@ -353,54 +273,22 @@ class NecFileObject:
 				comment = ""
 				ln = ln.strip()
 			if ln[0:2]== "SY":
-				if self.options.debug >1: sys.stderr.write("debug: \tParsing line: \"%s\"\n"%ln)
-				try:
-					d = self.evalVarLine(ln[3:].strip())
-					if self.options.debug: 
-						for dk in d.keys(): sys.stderr.write("debug: \tAdded independent parameter \"%s\"\n"%dk)
-						if self.options.debug>1: sys.stderr.write("debug: \t\tFull comment = \"%s\"\n"%comment)
-					self.vars.update(d)
-					for dk in d.keys(): self.paramlines[dk]=i
-					try:
-						#strip the real comment from the comment
-						comment_pos = comment.find("'")
-						if comment_pos!=-1:
-							comment = comment[0:comment_pos].strip()
-						if self.options.debug>1: 
-							sys.stderr.write("debug: \t\tLimits comment = \"%s\"\n"%comment)
-						min, max = eval(comment)
-						if min <= max:
-							for dk in d.keys(): self.min_max[dk]=(float(min),float(max))
-						else:
-							for dk in d.keys(): self.min_max[dk]=(float(max),float(min))
-						if self.options.debug: sys.stderr.write("debug: \t\tlimits(%.3g, %.3g)\n"%(float(min), float(max)))
-					except:
-						if self.options.debug>1: 
-							for dk in d.keys(): sys.stderr.write("debug: \tNo limits found for parameter \"%s\"\n"%dk)
-						pass
-				except:
-					if self.options.debug: sys.stderr.write("debug: \tAdded dependent parameter \"%s\"\n"%ln[3:].strip())
-					self.dependent_vars.append(ln[3:].strip())
+				self.parseSYLine(ln)
 			else:
 				self.varlines.append(ln.replace(',',' ').split())
-				self.comments.append(comment);
+				self.comments.append(comment)
+				varlineno = len(self.varlines)-1
+				varline = self.varlines[varlineno]
+				if ln[0:2]=="GW":
+					self.tag_segmentation.addWire(varline, varlineno)
+				if ln[0:2]=="GM" or ln[0:2]=="GR" or ln[0:2]=="GX":
+					self.tag_segmentation.addTransformation(varline)
 				if ln[0:2]=="EX":
-					tag = int(self.varlines[-1][2])
-					if tag not in self.source_tags:
-						self.source_tags[tag]=[(len(self.varlines)-1,i,3)]
-					else:
-						self.source_tags[tag].append((len(self.varlines)-1,i,3))
+					self.parseEXLine(varline,varlineno, i)
 				if ln[0:2]=="TL" or ln[0:2]=="NT":
-					tag = int(self.varlines[-1][1])
-					if tag not in self.source_tags:
-						self.source_tags[tag]=[(len(self.varlines)-1,i,2)]
-					else:
-						self.source_tags[tag].append((len(self.varlines)-1,i,2))
-					tag = int(self.varlines[-1][3])
-					if tag not in self.source_tags:
-						self.source_tags[tag]=[(len(self.varlines)-1,i,4)]
-					else:
-						self.source_tags[tag].append((len(self.varlines)-1,i,4))
+					self.parseNTOrTLLine(varline,varlineno, i)
+				if ln[0:2]=="LD":
+					self.parseLDLine(varline,varlineno, i)
 				elif ln[0:2] == "FR":
 					self.frequency = float(self.varlines[-1][5])
 				elif ln[0:2] == "GS":
@@ -457,12 +345,9 @@ class NecFileObject:
 			if segs % 2 == 0:
 				segs+=1
 			line[1]=segs
-			for refln in self.source_tags[tag]:
-				varline_no = refln[0]
-				line_no = refln[1]
-				token_no = refln[2]
-				self.varlines[varline_no][token_no] = str(int(segs/2)+1)
-				self.lines[line_no] = " ".join(self.varlines[varline_no])
+			for seg_ref in self.source_tags[tag]:
+				self.varlines[seg_ref.varline_no][seg_ref.token_no] = str(seg_ref.newSegNo(segs))
+				self.lines[seg_ref.line_no] = " ".join(self.varlines[seg_ref.varline_no])
 		
 
 	def autoSegmentation(self, segs_per_halfwave=0, freq = None):
@@ -492,229 +377,31 @@ class NecFileObject:
 	def formatName(self, n):
 		return "%8s"%n
 
-	def testLineIntersection(self, tag1, tag2, line1, line2, r1, r2):
-		if line1[0]==line2[0]:
-			if line1[1]!=line2[1]:return 1
-			else :	raise GeometryError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, 0))
-		if line1[0]==line2[1]:
-			if line1[1]!=line2[0]:return 1
-			else :	raise GeometryError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, 0))
-		if line1[1]==line2[0]:
-			if line1[0]!=line2[1]:return 1
-			else :	raise GeometryError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, 0))
-		if line1[1]==line2[1]:
-			if line1[0]!=line2[0]:return 1
-			else :	raise GeometryError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, 0))
-		#print "line1[0] = [%f, %f, %f]"%tuple(line1[0])
-		#print "line1[1] = [%f, %f, %f]"%tuple(line1[1])
-		#print "line2[0] = [%f, %f, %f]"%tuple(line2[0])
-		#print "line2[1] = [%f, %f, %f]"%tuple(line2[1])
-		v1 = v3sub(line1[1],line1[0])
-		l = v3len(v1)
-		if not l:
-			raise GeometryError("Line with 0 length (tag %d)"%tag1)
-		v1 = v3mul(1.0/l,v1)
-		v2 = v3sub(line2[1],line2[0])
-		l = v3len(v2)
-		if not l:
-			raise GeometryError("Line with 0 length (tag %d)"%tag2)
-		v2 = v3mul(1.0/l,v2)
-		n = v3unit(v3cross(v1,v2))
-		#print "v1 = [%f, %f, %f]"%tuple(v1)
-		#print "v2 = [%f, %f, %f]"%tuple(v2)
-		#print "n  = [%f, %f, %f]"%tuple(n)
-		if n[0]==0 and n[1]==0 and n[2]==0: #parallel
-			v2 = v3sub(line2[1], line1[0])
-			d = v3dot(v1,v2)
-			pr = v3add(line1[0],v3mul(d, v1))
-			pr = v3sub(line2[1],pr)
-			pr = v3len(pr)
-			if pr>r1+r2+self.options.min_wire_distance:
-				return 1
-
-			zerocount = 0
-			v2 = v3sub(line2[0], line1[0])
-			d = d * v3dot(v1,v2)
-			if d < 0 :
-				raise GeometryError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
-			elif d == 0:
-				zerocount = zerocount+1
-			v2 = v3sub(line2[1], line1[1])
-			d = v3dot(v1,v2)
-			v2 = v3sub(line2[0], line1[1])
-			d = d * v3dot(v1,v2)
-			if d < 0 :
-				raise GeometryError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
-			elif d == 0:
-				zerocount = zerocount+1
-
-			v2 = v3sub(line1[1], line2[1])
-			d = v3dot(v1,v2)
-			v2 = v3sub(line1[0], line2[1])
-			d = d * v3dot(v1,v2)
-			if d < 0 :
-				raise GeometryError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
-			elif d == 0:
-				zerocount = zerocount+1
-
-
-			v2 = v3sub(line1[1], line2[0])
-			d = v3dot(v1,v2)
-			v2 = v3sub(line1[0], line2[0])
-			d = d * v3dot(v1,v2)
-			if d < 0 :
-				raise GeometryError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
-			elif d == 0:
-				zerocount = zerocount+1
-
-			if zerocount > 2 :
-				raise GeometryError("Overlapping lines (tag %d and tag %d, distance=%f)"%(tag1, tag2, pr))
-
-			return 1
-
-		s = v3sub(line1[0], line2[0])
-		#print "s  = [%f, %f, %f]"%tuple(s)
-		d = v3dot(n, s)
-		#print "plane line distance = %f"%d
-		if abs(d) > r1+r2 + self.options.min_wire_distance: #infinite lines are far enough
-			return 1
-
-		m = v3mul(d, n)
-		l20 = v3sub(line2[0],m)
-		l21 = v3sub(line2[1],m)
-		#line2 and line1 are now in one plane
-
-		c1 = v3cross(v3unit(v3sub(l20,line1[0])),v1)
-		#print "c1 = [%f, %f, %f]"%tuple(c1)
-		c2 = v3cross(v3unit(v3sub(l21,line1[0])),v1)
-		#print "c2 = [%f, %f, %f]"%tuple(c2)
-		dot1 = v3dot(c1, n)*v3dot(c2, n)
-		c3 = v3cross(v3unit(v3sub(line1[0],l20)),v2)
-		#print "c3 = [%f, %f, %f]"%tuple(c3)
-		c4 = v3cross(v3unit(v3sub(line1[1],l20)),v2)
-		#print "c4 = [%f, %f, %f]"%tuple(c4)
-		dot2 = v3dot(c3, n)*v3dot(c4, n)
-		#print (dot1, dot2)
-		if dot1 < 0 and dot2 < 0:
-				raise GeometryError("Intersecting lines (tag %d and tag %d)"%(tag1, tag2))
-		return 1
-	def testLineIntersections(self, lines):
-		nlines= len(lines)
-		for i in range(nlines):
-			for j in range(i+1,nlines):
-				self.testLineIntersection(lines[i][0], lines[j][0], [lines[i][2:5],lines[i][5:8]], [lines[j][2:5],lines[j][5:8]], lines[i][8], lines[i][8])
-
-		return 1
-
-	def mirrorStructure(self, lines,comments, tincr, x,y,z):
-		#print "mirroring"
-		l = len(lines)
-		for i in range(l):
-			lines.append(list(lines[i]))
-			comments.append(comments[i])
-			if lines[l+i][0]:
-				lines[l+i][0]=lines[i][0]+tincr
-			if x:
-				lines[l+i][2]=-lines[i][2]
-				lines[l+i][5]=-lines[i][5]
-			if y:
-				lines[l+i][3]=-lines[i][3]
-				lines[l+i][6]=-lines[i][6]
-			if z:
-				lines[l+i][4]=-lines[i][4]
-				lines[l+i][7]=-lines[i][7]
-
-	def moveStructure(self, lines, rng, tincr, rx, ry,rz, x,y,z):
-		#print "moving %d lines, from %d to %d, incrementing tags with %d"%(rng[1]-rng[0],rng[0],rng[1],tincr)
-		rx = necmath.pi*rx/180
-		ry = necmath.pi*ry/180
-		rz = necmath.pi*rz/180
-		for i in range(rng[0], rng[1]):
-			if lines[i][0]:
-				lines[i][0]+=tincr
-			s = lines[i][2:5]
-			e = lines[i][5:8]
-			if rx:
-				v3rotx(rx, s)
-				v3rotx(rx, e)
-			if ry:
-				v3roty(ry, s)
-				v3roty(ry, e)
-			if rz:
-				v3rotz(rz, s)
-				v3rotz(rz, e)
-			s[0]+=x
-			s[1]+=y
-			s[2]+=z
-			e[0]+=x
-			e[1]+=y
-			e[2]+=z
-			lines[i][2:5]=s
-			lines[i][5:8]=e
-
-	def moveCopyStructure(self, lines,comments, tincr, new_structures, rx, ry,rz, x,y,z, from_tag):
-		#print "moving %d lines, incrementing tags with %d, starting from tag %d"%(len(lines),tincr, from_tag)
-		l = len(lines)
-		rng = (0, l)
-		if from_tag:
-			for i in range(0,l):
-				if lines[i][0]==from_tag:
-					rng = (i,l)
-					break
-			if rng == (0,l) and lines[0][0]!=from_tag:
-				return
-
-		if not new_structures:
-			self.moveStructure(lines, rng, tincr, rx,ry,rz,x,y,z)
-			return
-
-		while new_structures:
-			new_structures = new_structures-1
-			for i in range(rng[0],rng[1]):
-				lines.append(list(lines[i]))
-				comments.append(comments[i])
-
-			rng = (l,len(lines))
-			l = len(lines)
-			self.moveStructure(lines, rng, tincr, rx,ry,rz,x,y,z)
-
-
-	def rotateStructure(self, lines,comments, tincr, nstructures):
-		if nstructures<=1:
-			return
-		self.moveCopyStructure(lines,comments, tincr, nstructures-1, 0, 0,360.0/nstructures, 0,0,0, 0)
-
-	def necInputLines(self, skiptags=["FR", "XQ", "RP", "EN"]):
+	def necInputLines(self, frequency, skiptags=["FR", "XQ", "RP", "EN"]):
 		lines=[]
 		math_lines = []
 		comments = []
-		self.globals={}
-		self.globals.update(self.vars)
-		for d in self.dependent_vars:
-			try: self.evalVarLine(d,necmath.__dict__, self.globals)
-			except:
-				traceback.print_exc()
-				sys.stderr.write( "failed parsing '%s'\n"%(d))
-				raise
+		tag_radii = NecFileObject.TagRadii()
 		for li in range(len(self.varlines)):
 			ln = self.varlines[li]
 			comment = self.comments[li]
 			if not ln: continue
 			fn = lambda x:self.formatNumber(x,0)
 			if ln[0].strip() != "GW":
-				if ln[0].strip() not in skiptags:
+				cmdtag = ln[0].strip()
+				if cmdtag not in skiptags:
 					try:
 						sline = list(map( self.evalToken , ln[1:]))
 						sline = map(fn, sline)
 						lines.append(ln[0]+" "+" ".join(sline))
 					except:
 						lines.append(" ".join(ln))
-				if ln[0].strip() == "GX":
+				if cmdtag == "GX":
 					i1 = int(self.evalToken(ln[1]))
-					self.mirrorStructure(math_lines,comments, i1, int(ln[2][0]), int(ln[2][1]), int(ln[2][2]))
+					self.wire_structure.mirrorStructure(math_lines,comments, i1, int(ln[2][0]), int(ln[2][1]), int(ln[2][2]))
 					if not "GX" in skiptags:
 						lines[-1]="GX %d %s"%(i1,ln[2])
-				elif ln[0].strip() == "GM":
+				elif cmdtag == "GM":
 					if len(ln) < 10:
 						ln=ln+(10-len(ln))*[".0"]
 					i1 = int(self.evalToken(ln[1]))
@@ -726,64 +413,88 @@ class NecFileObject:
 					f7 = self.evalToken(ln[7])
 					f8 = self.evalToken(ln[8])
 					i9 = int(self.evalToken(ln[9]))
-					self.moveCopyStructure(math_lines,comments, i1, i2, f3, f4, f5, f6, f7, f8, i9)
+					self.wire_structure.moveCopyStructure(math_lines,comments, i1, i2, f3, f4, f5, f6, f7, f8, i9)
 					if not "GM" in skiptags:
 						lines[-1]="GM %d %d %f %f %f %f %f %f %d"%(i1, i2, f3, f4, f5, f6, f7, f8, i9)
-				elif ln[0].strip() == "GR":
+				elif cmdtag == "GR":
 					i1 = int(self.evalToken(ln[1]))
 					i2 = int(self.evalToken(ln[2]))
-					self.rotateStructure(math_lines,comments, i1, i2)
+					self.wire_structure.rotateStructure(math_lines,comments, i1, i2)
 					if not "GR" in skiptags:
 						lines[-1]="GR %d %d"%(i1, i2)
-				elif ln[0].strip() == "SP":
+				elif cmdtag == "SP":
 					i1 = int(ln[1])
 					i2 = int(self.evalToken(ln[2]))
 					if not "SP" in skiptags:
 						lines[-1]="SP %d %d "%(i1, i2)+" ".join(list(map( fn, map( self.evalToken , ln[3:]))))
-				elif ln[0].strip() == "SM":
+				elif cmdtag == "SM":
 					i1 = int(self.evalToken(ln[1]))
 					i2 = int(self.evalToken(ln[2]))
 					if not "SM" in skiptags:
 						lines[-1]="SM %d %d "%(i1, i2)+" ".join(list(map( fn, map( self.evalToken , ln[3:]))))
-				elif ln[0].strip() == "SC":
+				elif cmdtag == "SC":
 					i1 = int(ln[1])
 					i2 = int(ln[2])
 					if not "SC" in skiptags:
 						lines[-1]="SC %d %d "%(i1, i2)+" ".join(list(map( fn, map( self.evalToken , ln[3:]))))
+				elif cmdtag == "NT" or cmdtag == "TL" :
+					i1 = int(ln[1])
+					i2 = int(ln[2])
+					i3 = int(ln[3])
+					i4 = int(ln[4])
+					if not cmdtag in skiptags:
+						lines[-1]="%s %d %d %d %d "%(cmdtag, i1, i2, i3, i4)+" ".join(list(map( fn, map( self.evalToken , ln[5:]))))
+				elif cmdtag == "LD":
+					ldtype = int(ln[1].strip())
+					if ldtype > 7:
+						raise RuntimeError("Loads (LD) of type > 7 are not know to this script")
+					elif ldtype == 6:
+						i2 = int(self.evalToken(ln[2]))
+						i3 = int(self.evalToken(ln[3]))
+						i4 = int(self.evalToken(ln[4]))
+						Q = self.evalToken(ln[5])
+						if not Q: Q = 100
+						L = self.evalToken(ln[6])
+						C = self.evalToken(ln[7])
+						printOut( "L=%f, Q=%f, freq=%f"%(L,Q,frequency))
+						R = Q * 2 * necmath.pi * frequency * L * 1e+6
+						lines[-1]="LD 1 %d %d %d %s %s %s "%(i2, i3, i4, fn(R), fn(L), fn(C))
+					elif ldtype == 7:
+						i2 = int(self.evalToken(ln[2]))
+						i3 = int(self.evalToken(ln[3]))
+						i4 = int(self.evalToken(ln[4]))
+						R = self.evalToken(ln[6])
+						diel = self.evalToken(ln[5])
+						r = tag_radii.tagRadius(i2, "LD")
+						#printOut( "tag=%d, R=%f, r=%f, diel=%f"%(i2,R,r,diel))
+						L = 2e-7 * (diel * R/r)**(1.0/12) * (1 - 1/diel) * necmath.log(R/r)
+						lines[-1]="LD 5 %d %d %d 0 %s "%(i2, i3, i4, fn(L))
 			else:
 				sline = list(map( self.evalToken , ln[1:]))
+				sline[0] =int(sline[0])
+				sline[1] =int(sline[1])
+				tag_radii.addWire(sline[0], sline[-1])
 				math_lines.append(sline)
 				comments.append(comment)
-				if self.autosegment[0]:
+				if self.autosegment[0] and self.tag_segmentation.autoSegment(li):
 					self.autoSegment(sline)
 				sline = map(fn, sline)
 				lines.append(ln[0]+" "+" ".join(sline))
 		#del self.globals
 		if self.write_js_model:
 			self.writeJSModel(math_lines,comments)
-		if not self.testLineIntersections(math_lines):
+		if self.options.html:
+			self.html_output.addJSModel(math_lines,comments)
+		if not self.wire_structure.testLineIntersections(math_lines):
 			return []
 		return lines
 
 	def writeJSModel(self, lines, comments):
-		z = zip(comments,lines)
-		z.sort()
-		printOut( "var structure = [[")
-		if not z:
-			printOut("]]")
-			return;
-		c = z[0][0].strip()
-		printOut( '"%s"'%c)
-		for i in z:
-			if i[0].strip() != c:
-				c = i[0].strip()
-				printOut( '], ["%s"'%c)
-			ln = i[1]
-			printOut( (",%.4f"*6) % tuple(ln[2:8]))
-		printOut( "]]")
+		for i in jsModelFromLines(lines, comments):
+			printOut(i)
 
 	def writeNecInput(self, filename, extralines=[], skiptags=[]):
-		lines = self.necInputLines(skiptags)
+		lines = self.necInputLines(self.frequency, skiptags)
 		if not lines: return 0
 		lines.extend(extralines)
 		file = open(filename, "wt")
@@ -791,23 +502,14 @@ class NecFileObject:
 		finally: file.close()
 		return 1
 
-
 	def writeParametrized(self, filename, extralines=[], skiptags=[], comments=[]):
 		lines=[]
-		self.globals={}
-		self.globals.update(self.vars)
 		for v in self.vars.keys():
 			lno = self.paramlines[v]
 			if v in self.min_max.keys():
 				self.lines[lno] = "SY %s=%.7g ' %g, %g" %(v, self.vars[v], self.min_max[v][0], self.min_max[v][1])
 			else:
 				self.lines[lno] = "SY %s=%.7g" %(v, self.vars[v])
-		for d in self.dependent_vars:
-			try: self.evalVarLine(d, necmath.__dict__, self.globals)
-			except:
-				traceback.print_exc()
-				sys.stderr.write("failed parsing '%s'\n"%(d))
-				raise
 		has_comments = 0
 		for ln in self.lines:
 			comment_pos = ln.find("'")
@@ -825,8 +527,9 @@ class NecFileObject:
 				continue
 			if sl[0].strip() == "GW":
 				sline = list(map( self.evalToken , sl[1:]))
-				self.autoSegment(sline)
-				sl[2] = str(sline[1])
+				if self.autosegment[0] and sl[2][0]!='+':
+					self.autoSegment(sline)
+					sl[2] = str(sline[1])
 				lines.append(" ".join(sl)+comment)
 
 		#del self.globals
@@ -862,12 +565,17 @@ class NecFileObject:
 		lines.append("XQ")
 		lines.append("EN")
 		return lines
-#		self.writeNecInput(filename, lines, ["FR", "XQ", "RP", "EN"])
 	def agtLines(self, nec_input_lines, sweep):
 		lines = []
 		for line in nec_input_lines:
 			if line[0:2]!="LD":
 				lines.append(line)
+			else:
+				sl = line.split()
+				if sl[1]=='5':
+					continue
+				sl[5]="0"
+				lines.append(" ".join(sl))
 		agt_freq = sweep.agt_freq
 		lines.append("FR 0 0 0 0 %g 0"%agt_freq)
 		step = self.options.angle_step
@@ -1095,29 +803,33 @@ class NecFileObject:
 		except:
 			pass
 
-
 	def runSweeps(self, get_agt_scores = 0, use_agt = None, id = ""):
 		#if self.options.cleanup:
 		#	self.cleanupOutput(self.options.cleanup)
 		results={}
 		number=0
-		try:
-			nec_input_lines = self.necInputLines()
-		except:
-			if not self.options.quiet: traceback.print_exc()
-			return
 
 		from threading import Lock, Thread
 		result_lock = Lock()
 		threads = []
 		for i in range(len(self.sweeps)-1):
 			sweep = self.sweeps[i]
+			try:
+				nec_input_lines = self.necInputLines(sweep.midFrequency())
+			except:
+				if not self.options.quiet: traceback.print_exc()
+				return
 			threads.append(Thread(target=self.runSweepT, args=(nec_input_lines, sweep, number,results, result_lock,get_agt_scores,use_agt,id )))
 			threads[-1].start()
 			number = number+1
 
 		r = None
 		sweep = self.sweeps[-1]
+		try:
+			nec_input_lines = self.necInputLines(sweep.midFrequency())
+		except:
+			if not self.options.quiet: traceback.print_exc()
+			return
 		try:
 			ua = None
 			if use_agt and number in use_agt:
@@ -1144,6 +856,7 @@ class NecFileObject:
 		results = self.runSweeps() #[[174,6,8],[470,6,40]]
 		h={}
 		v={}
+		res = []
 		if not chart_like:
 			printOut("Input file : %s"%self.options.input )
 			printOut("Freq sweeps: %s"%str(self.options.sweeps) )
@@ -1161,8 +874,8 @@ class NecFileObject:
 				h.update(nop.horizontalPattern())
 				v.update(nop.verticalPattern())
 				nop.printFreqs(r==0)
+				res = res+nop.getGainSWRChartData()
 		else:
-			res = [];
 			for r in range(len(results)):
 				nop = NOP(results[r][0], results[r][2], self.options)
 				h.update(nop.horizontalPattern())
@@ -1170,12 +883,19 @@ class NecFileObject:
 				res = res+nop.getGainSWRChartData()
 			res.sort()
 			g = self.options.input+"_gain"
-			for i in res: g+=(",%.2f"%i[1])
+			for i in res: g+=(",%.2f"%i[1][0])
 			s = self.options.input+"_swr"
-			for i in res: s+=(",%.2f"%i[2])
+			for i in res: s+=(",%.2f"%i[1][1])
 			printOut( g)
 			printOut( s)
 
+		if self.options.html:
+#			if self.options.horizontal_gain:
+			self.html_output.addHPattern(h)
+#			else:
+#				self.html_output.addVPattern(v)
+			self.html_output.addGainChart(self.options.sweeps, res)
+			self.html_output.writeToFile(self.options.html)
 		if self.write_js_model:
 			printOut( "Horizontal:")
 			printOut( sorted(h.keys()))
@@ -1212,9 +932,10 @@ class OptionParser(optparse.OptionParser):
 		self.add_option("--forward-dir", default=0, type="int", help="the forward direction, by default is 0 which means the antenna forward is along X.")
 		self.add_option("--backward-dir", default=180, type="int", help="the backward direction (relative to --forward-dir) to which F/R and F/B are calculated. The default is 180 which means the exact opposite of the forward-dir")
 		self.add_option("--rear-angle", default=120, type="int", help="angle for calculating rear gain (max 270)")
+		self.add_option("--beamwidth-ratio", default=3.01, type="float", help="ratio for calculating beam width in dB, default=%default")
 		self.set_defaults(gain_type=1)
-		self.add_option("--vertical-gain", action="store_const", const=0, dest="gain_type", help="calculate horizontal gain [default]")
-		self.add_option("--horizontal-gain", action="store_const", const=1, dest="gain_type", help="calculate vertical gain")
+		self.add_option("--vertical-gain", action="store_const", const=0, dest="gain_type", help="calculate vertical gain ")
+		self.add_option("--horizontal-gain", action="store_const", const=1, dest="gain_type", help="calculate horizontal gain [default]")
 		self.add_option("--total-gain", action="store_const", const=2, dest="gain_type", help="calculate total gain")
 		self.add_option("-f", "--frequency_data", default = "{}", help="a map of frequency to (angle, expected_gain) tuple" )
 		self.add_option("--cleanup", default=180, type="int", help="remove output files older than CLEANUP seconds. set to 0 to disable")
@@ -1250,6 +971,7 @@ def optionParser():
 			self.add_option("-c", "--centers", default=True, help="run sweep on the channel centers",action="store_false", dest="ends")
 			self.add_option("--chart", default=0, action="store_true")
 			self.add_option("--js-model", default=0, action="store_true", help="write jsmodel")
+			self.add_option("--html", default="output.html", help="html output file")
 		def parse_args(self):
 			options, args = OptionParser.parse_args(self)
 			class Calc: pass
@@ -1257,6 +979,7 @@ def optionParser():
 			options.calc.gain=1
 			options.calc.f2b=1
 			options.calc.f2r=1
+			options.calc.beam_width=1
 			options.quiet=0
 			options.forward = 0
 			options.verbose=0

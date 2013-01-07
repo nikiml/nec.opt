@@ -5,7 +5,7 @@
 import nec.differential_evolution as DE
 import os, math,sys,traceback,time,random
 from nec import eval as ne
-from nec.eval import printOut
+from nec.print_out import printOut
 
 class NecFileEvaluator:
 
@@ -378,6 +378,9 @@ class NecFileEvaluator:
 								raise RuntimeError("Failed to calculated F/R")
 						else:
 							rear = 0
+						if self.options.calc.beam_width:
+							beam = freq.beamWidth(self.options.forward_dir, self.options.angle_step, self.options.beamwidth_ratio) 
+							range_results[freqid[0]].add("beam_width", beam)
 						#print "freq %g, target level %g, net %g, freqno %d, gaindiff %g, swrdiff %g"%(freq.freq, tl, freq.net(),freqid[0], gain_diff, swr_diff)
 						f2r = (net-rear)
 						f2r_diff = self.options.f2r_target-f2r
@@ -586,10 +589,11 @@ def optionsParser():
 				sys.stderr.write("WARNING: No sweeps parameters specified\n")
 			class Calc: pass
 			options.calc = Calc()
+			options.calc.beam_width = (options.target_function.find("beam_width")!=-1)
 			options.calc.f2r = (options.target_function.find("f2r")!=-1)
 			options.calc.f2b = (options.target_function.find("f2b")!=-1)
-			options.calc.gain = (options.target_function.find("gain")!=-1) or options.calc.f2r or options.calc.f2b
-			options.forward = not (options.calc.f2b or options.calc.f2r or options.omni or options.frequency_data)
+			options.calc.gain = (options.target_function.find("gain")!=-1) or options.calc.f2r or options.calc.f2b or options.calc.beam_width
+			options.forward = not (options.calc.f2b or options.calc.f2r or options.omni or options.frequency_data or options.calc.beam_width)
 			if not options.quiet: 
 				printOut( "Sweeps set to:" )
 				printOut( options.sweeps)

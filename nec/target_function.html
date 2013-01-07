@@ -1,0 +1,65 @@
+<html>
+<body>
+<h3>Target function</h3>
+<p>The target function is a user defined expression build using some or all of the available
+target function tokens. The available tokens are:</p>
+<ol>
+<li><p>All symbols (<b>SY</b>) from the nec file.</p>
+   <p>This allows some geometrical properties of the antenna to be optimized,
+   for example one can minimize the boom length of a yagi</p>
+</li>
+<li><p>Statistical tokens calculated from the values reported by the nec engine.</p>
+   <p>For every "value" calculated by the nec engine the optimizer defines 7 statistics all of which are valid tokens,
+   and are composed by appending one or two of the prefixes "min_", "max_" and "ave_" to the name of the "value":
+   <ul>
+   <li><b>max_value</b> - the maximum of "value"s across all evaluated frequencies</li>
+   <li><b>ave_value</b> - the average of "value"s across all evaluated frequencies</li>
+   <li><b>ave_max_value</b> - the average of all "max_value"s, where each "max_value" calculated from a single sweep
+        and the average is taken across the sweeps</li>
+   <li><b>max_ave_value</b> - the max of all "ave_value"s, where each "ave_value" calculated from a single sweep
+        and the maximum is taken across the sweeps</li>
+   and analogously
+   <li><b>min_value</b></li>
+   <li><b>min_ave_value</b> and</li>
+   <li><b>ave_min_value</b></li>
+   </ul>
+   </p>
+   <p>The "value"s evaluated for every frequency are:
+   <ul>
+   <li><b>gain_diff</b> - the difference between the target net gain and the achieved net gain</li>
+   <li><b>swr_diff</b> - the difference between the target swr and the achieved swr</li>
+   <li><b>f2r_diff</b> - the difference between the target F/R and the achieved F/R</li>
+   <li><b>f2b_diff</b> - the difference between the target F/B and the achieved F/B</li>
+   <li><b>net_gain</b> - the net gain of the antenna</li>
+   <li><b>raw_gain</b> - the raw gain of the antenna</li>
+   <li><b>ml</b> - the mismatch loss of the antenna (raw_gain - net_gain)</li>
+   <li><b>swr</b> - the swr </li>
+   <li><b>agt_correction</b> - the gain correction based on the AGT of the antenna</li>
+   <li><b>f2r</b> - F/R ratio</li>
+   <li><b>f2b</b> - F/B ratio</li>
+   <li><b>real</b> - the real impedance</li>
+   <li><b>imag</b> - the imaginary impedance</li>
+   </ul>
+   </p>
+
+   <p>The "net_gain" for example spans the following 7 tokens:
+      min_net_gain, max_net_gain, ave_net_gain, min_ave_net_gain, max_ave_net_gain, ave_min_net_gain and ave_max_net_gain.</p>
+
+   <p>When only one sweep is being optimized:</p>
+   <ul>
+   <li>the min_ave_"value"s and the max_ave_"value"s are the same as ave_"value"s</li>
+   <li>the ave_min_"value"s are the same as min_"value"s  and</li>
+   <li>the ave_max_"value"s are the same as max_"value"s.</li>
+   </ul>
+</ol>
+
+<p>The target function is always minimized, and that should be kept in mind when composing target function.</p>
+<p>For example it does not make sense to minimize the tokens "max_net_gain", "ave_net_gain", etc., since
+we need those generally maximized and that can be achieved by minimizing "-min_net_gain"(the negative "min_net_gain").</p>
+<p>Also minimizing "ave_swr" is good, but minimizing "min_swr" is not, since that does not control the max_swr
+which can be quite excessive.</p>
+<p>The general rule is that if you want a value minimized you should use its "max" or "ave" statistics,
+and if you want a value maximized use its negated "min" or negated "ave" statistics.</p>
+<p>The "diff" values are designed for direct minimization.</p>
+</body>
+</html>

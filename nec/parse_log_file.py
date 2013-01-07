@@ -1,3 +1,5 @@
+from nec.print_out import printOut
+
 def distance(m1, m2, min_dif, num_calculated):
 	d = 0
 	for i in range(1, len(m1)-num_calculated):
@@ -25,7 +27,7 @@ def parseLogFile(filename, np, min_distance, min_dif,num_calculated):
 	if i==-1:
 		return ()
 
-	print i
+	printOut( i )
 
 	vars = lines[i].split()
 	lines = lines[i+1:]
@@ -60,12 +62,12 @@ if __name__ == "__main__":
 	opts, args = options.parse_args()
 	p = parseLogFile(opts.log_file, opts.de_np, opts.min_distance, opts.min_dif,opts.num_calculated)
 	if not p:
-		print "Failed to extract population"
+		printOut( "Failed to extract population")
 	else:
 		vars, population = p
-		print ((len(vars))*"%9s ")%tuple(vars)
+		printOut( ((len(vars))*"%9s ")%tuple(vars) )
 		for i in range(len(population)):
-			print ((len(vars))*"%3.5f ")%tuple(population[i])
+			printOut( ((len(vars))*"%3.5f ")%tuple(population[i]) )
 
 
 	
