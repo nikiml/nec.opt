@@ -36,6 +36,7 @@ class NecFileObject:
 		self.wire_structure = WireStructure(options)
 		self.vars = {}
 		self.min_max = {}
+		self.dependent_vars = []
 		self.lines=[]
 		self.varlines=[]
 		self.paramlines={}
@@ -176,7 +177,7 @@ class NecFileObject:
 		if not tag: raise RuntimeError("Tag 0 is not supported in %s card"%card)
 
 
-	def parseSYLine(self, ln):
+	def parseSYLine(self, ln, comment, lineno):
 		if self.options.debug >1: sys.stderr.write("debug: \tParsing line: \"%s\"\n"%ln)
 		try:
 			d = self.evalVarLine(ln[3:].strip())
@@ -184,7 +185,7 @@ class NecFileObject:
 				for dk in d.keys(): sys.stderr.write("debug: \tAdded independent parameter \"%s\"\n"%dk)
 				if self.options.debug>1: sys.stderr.write("debug: \t\tFull comment = \"%s\"\n"%comment)
 			self.vars.update(d)
-			for dk in d.keys(): self.paramlines[dk]=i
+			for dk in d.keys(): self.paramlines[dk]=lineno
 			try:
 				#strip the real comment from the comment
 				comment_pos = comment.find("'")
@@ -205,7 +206,8 @@ class NecFileObject:
 			self.globals.update(d)
 		except:
 			if self.options.debug: sys.stderr.write("debug: \tAdded dependent parameter \"%s\"\n"%ln[3:].strip())
-			try: self.evalVarLine(ln[3:].strip(),necmath.__dict__, self.globals)
+			self.dependent_vars.append(ln[3:].strip())
+			try: self.evalVarLine(self.dependent_vars[-1],necmath.__dict__, self.globals)
 			except:
 				traceback.print_exc()
 				sys.stderr.write( "failed parsing '%s'\n"%(d))
@@ -257,6 +259,7 @@ class NecFileObject:
 	def parse(self):		
 		if self.options.debug: sys.stderr.write("debug: Parsing input\n")
 		self.vars = {}
+		self.dependent_vars = []
 		self.globals={}
 		self.varlines=[]
 		self.source_tags={}
@@ -273,7 +276,7 @@ class NecFileObject:
 				comment = ""
 				ln = ln.strip()
 			if ln[0:2]== "SY":
-				self.parseSYLine(ln)
+				self.parseSYLine(ln, comment, i)
 			else:
 				self.varlines.append(ln.replace(',',' ').split())
 				self.comments.append(comment)
@@ -377,10 +380,21 @@ class NecFileObject:
 	def formatName(self, n):
 		return "%8s"%n
 
+	def updateGlobalVars(self):
+		self.globals={}
+		self.globals.update(self.vars)
+		for d in self.dependent_vars:
+			try: self.evalVarLine(d,necmath.__dict__, self.globals)
+			except:
+				traceback.print_exc()
+				sys.stderr.write( "failed parsing '%s'\n"%(d))
+				raise
+		
 	def necInputLines(self, frequency, skiptags=["FR", "XQ", "RP", "EN"]):
 		lines=[]
 		math_lines = []
 		comments = []
+		self.updateGlobalVars()
 		tag_radii = NecFileObject.TagRadii()
 		for li in range(len(self.varlines)):
 			ln = self.varlines[li]
@@ -503,6 +517,7 @@ class NecFileObject:
 		return 1
 
 	def writeParametrized(self, filename, extralines=[], skiptags=[], comments=[]):
+		self.updateGlobalVars()
 		lines=[]
 		for v in self.vars.keys():
 			lno = self.paramlines[v]

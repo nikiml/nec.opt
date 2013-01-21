@@ -58,7 +58,7 @@ def jsModelFromLines(lines, comments):
 	z = list(zip(comments,lines))
 	z.sort()
 
-	res = ["var structure = [["]
+	res = ["var structure = ","[["]
 	if not z:
 		res.append("]]")
 		return (res,.0,.0)
@@ -69,9 +69,9 @@ def jsModelFromLines(lines, comments):
 	for i in z:
 		if i[0].strip() != c:
 			c = i[0].strip()
-			res.append( '], ["%s"'%c)
+			res.append( '],["%s"'%c)
 		ln = i[1]
-		res.append( (",%.4f"*6) % tuple(ln[2:8]))
+		res.append( (",%g"*6) % tuple(map(lambda x: round(x,4), ln[2:8])))
 		_min = min(min(ln[2:8]),_min)
 		_max = max(max(ln[2:8]),_max)
 	res.append( "]]")
@@ -87,13 +87,15 @@ class HtmlOutput:
 		file = open(filename,"wt")
 		file.writelines(self.head)
 		file.writelines(self.body_start)
+		file.write('<a href="http://clients.teksavvy.com/~nickm/viewer/g.html?geometry=%s">Geoemtry viewer link</><hr/>\n'%self.js_model_line)
 		file.write(body_end)
 		file.close()
 	def addJSModel(self, lines, comments):
 		if self.js_model_added: return 
 		js_model, _min, _max = jsModelFromLines(lines, comments)
+		self.js_model_line = "".join(js_model[1:]).replace('"',"%22")
 		js_model[-1]=js_model[-1]+';\n'
-		js_model.append("var geom = new antennaGeometry('geometry', Math.max(width-20,0),Math.max(height-30,0), Math.min(height,width)/%f, structure,0, 0);\n"% (2.0/max(.1,-_min,_max)))
+		js_model.append("var geom = new antennaGeometry('geometry', Math.max(width-20,0),Math.max(height-30,0), Math.min(height,width)/%f, structure,0, 0);\n"% (2.2*max(.1,-_min,_max)))
 		js_model.append("geom.redraw();\n")
 		self.head+=js_model
 		self.js_model_added = 1
@@ -134,6 +136,9 @@ class HtmlOutput:
 					swrs.append(gain_swr_data[f][1])
 			if not freqs: continue
 
+			gains = list(map(lambda x: round(x,2),gains))
+			swrs = list(map(lambda x: round(x,2),swrs))
+
 			min_gain = math.floor(min(gains))
 			max_gain = math.ceil(max(gains))
 			min_swr = math.floor(min(swrs))
@@ -141,12 +146,13 @@ class HtmlOutput:
 			min_gain =  min_gain-4-2*(max_swr-1)
 			min_h = max(24*(max_gain-min_gain)+40, 240)
 			self.body_start.append( '<div id="%s" style="height: %dpx; width:80%%"></div><hr/>\n'%(sweep_name, min_h))
+			self.body_start.append( '<a href="http://clients.teksavvy.com/~nickm/viewer/c.html?sweep=[%g,%g,%g]&amp;gain=[%s]&amp;swr=[%s]">Chart viewer link</><hr/>\n'%(sweep[0],sweep[1],sweep[2], ("%g,"*len(gains))[0:-1]%tuple(gains), ("%g,"*len(swrs))[0:-1]%tuple(swrs) ))
 			self.head.append('gainChart("%(sweep_name)s", width*.75, %(height)d, %(freqs)s,%(gains)s,%(swrs)s, %(min_gain)d, %(max_gain)d, %(max_swr).1f, "%(title)s");\n' % {
 				'sweep_name':sweep_name,
 				'height': min_h-40,
 				'freqs' : str(freqs),
-				'gains' : str([["%s gain - ave %.2fdBi"%(sweep_title,sum(gains)/len(gains)),"#000"]+list(map(lambda x: round(x,2),gains))]),
-				'swrs'  : str([["%s swr"%sweep_title,"#888"]+list(map(lambda x: round(x,2),swrs))]),
+				'gains' : str([["%s gain - ave %.2fdBi"%(sweep_title,sum(gains)/len(gains)),"#000"]+gains]),
+				'swrs'  : str([["%s swr"%sweep_title,"#888"]+swrs]),
 				'min_gain' : int(min_gain),
 				'max_gain' : int(max_gain),
 				'max_swr' : 1+(max_gain-min_gain)/2,

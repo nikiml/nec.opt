@@ -1,4 +1,5 @@
 from nec.demathutils import v3add, v3mul, v3sub, v3dot, v3cross, v3len, v3unit, v3rotx, v3roty, v3rotz
+from nec import necmath
 
 class GeometryError (RuntimeError):
 	def __init__(self, msg):

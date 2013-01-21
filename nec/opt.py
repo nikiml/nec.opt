@@ -330,7 +330,6 @@ class NecFileEvaluator:
 		for i in range(len(self.opt_vars)):
 			var = self.opt_vars[i]
 			self.nec_file.vars[var]=vector[i]
-
 		#print "in target_ : Get agt score = %d"%get_agt_score
 		results = self.nec_file.runSweeps(get_agt_score, use_agt,id)
 		res = -1000
@@ -579,6 +578,7 @@ def optionsParser():
 				if options.local_search: options.output_best = 0
 				else: options.output_best = 1
 				printOut( "Output best set to: %d" % options.output_best)
+			options.html=""
 
 			if  len(options.sweeps)!=len(options.target_levels) and not options.frequency_data:
 				raise RuntimeError("The number of sweep ranges is not matching the number of target options")
