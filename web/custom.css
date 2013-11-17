@@ -1,5 +1,12 @@
+
+////////////////////////////
+
+
 code.box, pre.box { background: #EEEEEE; padding: .5em; margin-bottom: 1em; line-height: 1  }
 div.menu___ { background: #C5CCD9 }
+
+a:focus, a:hover {color:#000;}
+a {color:#009;text-decoration:underline;}
 
 
 table {
@@ -34,3 +41,16 @@ h1{
 div.comments{
 	height: 600px
 }
+
+/* For great looking type, use this code instead of asdf:
+   <span class="alt">asdf</span>
+   Best used on prepositions and ampersands. */
+
+.alt {
+  color: #666;
+  font-family: "Warnock Pro", "Goudy Old Style","Palatino","Book Antiqua", Georgia, serif;
+  font-style: italic;
+  font-weight: normal;
+}
+
+
