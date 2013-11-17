@@ -1,0 +1,40 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+	<title>nikiml's Antenna pages - Geometry viewer</title>
+        <meta name="author" content="Nikolay Mladenov"/>
+        <meta name="description" content="view geometry from the url"/>
+	<!-- Framework CSS -->
+	<link rel="stylesheet" href="../blueprint/screen.css" type="text/css" media="screen, projection" />
+	<link rel="stylesheet" href="../blueprint/print.css" type="text/css" media="print" />
+	<!--[if lt IE 8]><link rel="stylesheet" href="../blueprint/ie.css" type="text/css" media="screen, projection"/><![endif]-->
+	<link rel="stylesheet" href="../custom.css" type="text/css" media="screen, projection" />
+	<script src="../js/sylvester.js" type="text/javascript" charset="utf-8"></script>
+	<script src="../js/raphael.js" type="text/javascript" charset="utf-8"></script>
+	<script src="../js/g.raphael.js" type="text/javascript" charset="utf-8"></script>
+	<script src="../js/array-augment.js" type="text/javascript" charset="utf-8"></script>
+	<script src="../js/antenna-model-viewer.js" type="text/javascript" charset="utf-8"></script>
+	<script src="../js/nec-viewer.js" type="text/javascript" charset="utf-8"></script>
+	<script src="../js/color_to_hex.js" type="text/javascript" charset="utf-8"></script>
+	<script src="../js/menu.js" type="text/javascript" charset="utf-8"></script>
+	<script src="../js/viewer-menu.js" type="text/javascript" charset="utf-8"></script>
+	<script>
+		window.onload=function(){onViewerLoad("geometry", NecViewer.geometryViewer, NecViewer);};
+	</script>
+</head>
+<body>
+	<div id="menu" class="span-4 menu box" style="float:left"></div>
+	<div id="geometry"></div>
+<script type="text/javascript">
+	var _gaq = _gaq || [];
+	_gaq.push(['_setAccount', 'UA-5827251-2']);
+	_gaq.push(['_trackPageview']);
+	(function() {
+		var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+		ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+		var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+	})();
+</script>
+</body>
+</html>
