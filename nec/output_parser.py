@@ -128,15 +128,22 @@ class NecOutputParser:
 			self.parse(output)
 
 	def printFreqs(self, header=1):
+		lines = []
 		if not self.options.frequency_data:
 			if header: 
-				printOut( "%6s %8s %8s %7s %7s %7s %7s %8s %8s %12s"%("Freq", "RawGain", "NetGain", "SWR", "BeamW", "F/R", "F/B", "Real", "Imag", "AGT(corr)"))
-				printOut( "=========================================================================================")
+				l = "%6s %8s %8s %7s %7s %7s %7s %8s %8s %12s"%("Freq", "RawGain", "NetGain", "SWR", "BeamW", "F/R", "F/B", "Real", "Imag", "AGT(corr)")
+				printOut( l )
+				lines.append(l)
+				l = "========================================================================================="
+				printOut( l)
+				lines.append(l)
 			#if self.agt!=0:
 			#	printOut( "AGT=%g dB"%self.agt)
 			for i in self.frequencies:
 				if not i.valid():
-					printOut( "%6.1f - invalid result"%i.freq)
+					l = "%6.1f - invalid result"%i.freq
+					printOut( l)
+					lines.append(l)
 				else:
 					rear = "n/a"
 					back = "n/a"
@@ -156,19 +163,29 @@ class NecOutputParser:
 						net = "% 8.3f"%net
 						if self.options.calc.beam_width:
 							beam_width = "% 7.1f"%i.beamWidth(self.options.forward_dir, self.options.angle_step, self.options.beamwidth_ratio)
-					printOut( "% 6.1f % 8s % 8s % 7.3f % 7s % 7s % 7s % 8.2f % 8.2f %5.2f(% 6.3f)"%	\
-							(i.freq, raw, net,i.swr(), beam_width, rear, back, i.real, i.imag, i.AGT, i.agt))
+					l = "% 6.1f % 8s % 8s % 7.3f % 7s % 7s % 7s % 8.2f % 8.2f %5.2f(% 6.3f)"%(i.freq, raw, net,i.swr(), beam_width, rear, back, i.real, i.imag, i.AGT, i.agt)
+					printOut( l)
+					lines.append(l)
 
 		else:
 			if header: 
-				printOut( "%6s %7s %6s %8s %8s %7s %8s %8s %7s %12s"%("Freq", "Target", "Angle", "RawGain", "NetGain", "SWR", "Real", "Imag", "Diff", "AGT(corr)"))
-				printOut( "=========================================================================================")
+				l = "%6s %7s %6s %8s %8s %7s %8s %8s %7s %12s"%("Freq", "Target", "Angle", "RawGain", "NetGain", "SWR", "Real", "Imag", "Diff", "AGT(corr)")
+				printOut( l)
+				lines.append(l)
+				l = "========================================================================================="
+				printOut( l)
+				lines.append(l)
 			for i in self.frequencies:
 				if not i.valid():
-					printOut( "%6.4g - invalid result"%i.freq)
+					l = "%6.4g - invalid result"%i.freq
+					printOut( l)
+					lines.append(l)
 				else:
 					target = self.options.frequency_data[i.freq][1]
-					printOut( "% 6.1f % 7.2f % 6.1f % 8.3f % 8.3f % 7.3f % 8.2f % 8.2f % 7.3f %5.2f(% 6.3f)"%(i.freq, target, i.angle, i.gain, i.net(),i.swr(), i.real, i.imag, target-i.net(), i.AGT, i.agt))
+					l = "% 6.1f % 7.2f % 6.1f % 8.3f % 8.3f % 7.3f % 8.2f % 8.2f % 7.3f %5.2f(% 6.3f)"%(i.freq, target, i.angle, i.gain, i.net(),i.swr(), i.real, i.imag, target-i.net(), i.AGT, i.agt)
+					printOut( l)
+					lines.append(l)
+		return lines
 	def getGainSWRChartData(self):
 		res = []
 		for i in self.frequencies:
@@ -278,105 +295,3 @@ class NecOutputParser:
 				if f.freq in self.options.frequency_data.keys():
 					freqs.append(f)
 			self.frequencies = freqs
-
-
-import optparse 
-class OptionParser(optparse.OptionParser):
-	def __init__(self):
-		optparse.OptionParser.__init__(self)
-		self.add_option("-o", "--output-dir", type="string", metavar="DIR", dest="output", default=output, help="output path [%default]")
-		self.add_option("-i", "--input", type="string", metavar="NEC_FILE", dest="input", default="", help="input nec file")
-		self.add_option("-s", "--sweep", type="string", metavar="SWEEP", action="append", dest="sweeps", help="adds a sweep range e.g. -s (174,6,8) for vhf-hi freqs")
-		self.add_option("-C", "--char-impedance", type="float", metavar="IMPEDANCE", default=300.0, help="The default is %default Ohms.")
-		self.add_option("-u", "--uhf", "--uhf-52", action="append_const", dest="sweeps", const="(470,6,39)", help="adds a uhf (ch. 14-51) sweep")
-		self.add_option("-U", "--uhf-69", action="append_const", dest="sweeps", const="(470,6,57)", help="adds a uhf (ch. 14-69) sweep")
-		self.add_option("-V", "--vhf-hi", action="append_const", dest="sweeps", const="(174,6,8)", help="adds a vhf-hi (ch. 7-13) sweep")
-		self.add_option("-v", "--vhf-lo", action="append_const", dest="sweeps", const="(54,6,6)", help="adds a vhf-lo (ch. 1-6) sweep")
-		self.add_option("-n", "--num-cores", type="int", default=ncores, help="number of cores to be used, default=%default")
-		self.add_option("-a", "--auto-segmentation", metavar="NUM_SEGMENTS", type="int", default=autosegmentation, help="autosegmentation level - set to 0 to turn autosegmentation off, default=%default")
-		self.add_option("-e", "--engine", metavar="NEC_ENGINE", default="nec2dxs1k5", help="nec engine file name, default=%default")
-		self.add_option("--engine-takes-cmd-args", default="auto", type="string", help="the nec engine takes command args, default=auto (which means no on windows yes otherwise). Other options are 'yes' or 'no'.")
-		self.add_option("-d", "--min-wire-distance", default=.005, type="float", help="minimum surface-to-surface distance allowed between non-connecting wires, default=%default")
-		self.add_option("--debug", default=0, type="int", help="turn on some loging")
-		self.add_option("--forward-dir", default=0, type="int", help="the forward direction, by default is 0 which means the antenna forward is along X.")
-		self.add_option("--backward-dir", default=180, type="int", help="the backward direction (relative to --forward-dir) to which F/R and F/B are calculated. The default is 180 which means the exact opposite of the forward-dir")
-		self.add_option("--rear-angle", default=120, type="int", help="angle for calculating rear gain (max 270)")
-		self.set_defaults(gain_type=1)
-		self.add_option("--vertical-gain", action="store_const", const=0, dest="gain_type", help="calculate horizontal gain [default]")
-		self.add_option("--horizontal-gain", action="store_const", const=1, dest="gain_type", help="calculate vertical gain")
-		self.add_option("--total-gain", action="store_const", const=2, dest="gain_type", help="calculate total gain")
-		self.add_option("-f", "--frequency_data", default = "{}", help="a map of frequency to (angle, expected_gain) tuple" )
-		self.add_option("--cleanup", default=180, type="int", help="remove output files older than CLEANUP seconds. set to 0 to disable")
-	def parse_args(self):
-		options, args = optparse.OptionParser.parse_args(self)
-		if options.rear_angle<0 or options.rear_angle>270: raise ValueError("Invalid rear angle of %d"%options.rear_angle)
-		options.frequency_data = eval(options.frequency_data)
-		if options.input == "":
-			if len(args):
-				options.input=args[0]
-				del args[0]
-			else:
-				options.input = input
-		while options.forward_dir < 0:
-			options.forward_dir+=360
-		while options.forward_dir > 360:
-			options.forward_dir-=360
-		options.backward_dir += options.forward_dir
-		while options.backward_dir < 0:
-			options.backward_dir+=360
-		while options.backward_dir > 360:
-			options.backward_dir-=360
-		if options.sweeps:
-			options.sweeps = map(eval,options.sweeps)
-		return (options, args)
-
-def optionParser():
-	class MainOptionParser(OptionParser):
-		def __init__(self):
-			OptionParser.__init__(self)
-			self.add_option("--param-values-file", default="", help="Read the parameter values from file, generate output.nec and evaluate it instead of the input file. The file should contain two lines: space separated parameter names on the first and space separated values on the second.")
-			self.add_option("--agt-correction", default=1, type="int", help="ignored. agt correction is always applied")
-			self.add_option("-c", "--centers", default=True, help="run sweep on the channel centers",action="store_false", dest="ends")
-			self.add_option("--chart", default=0, action="store_true")
-			self.add_option("--js-model", default=0, action="store_true", help="write jsmodel")
-		def parse_args(self):
-			options, args = OptionParser.parse_args(self)
-			class Calc: pass
-			options.calc = Calc()
-			options.calc.gain=1
-			options.calc.f2b=1
-			options.calc.f2r=1
-			options.quiet=0
-			options.forward = 0
-			options.verbose=0
-			if not options.sweeps:
-				options.sweeps = [(470,6,39)]
-			if not options.ends:
-				for i in range(len(options.sweeps)):
-					if not options.sweeps[i][1]: continue
-					options.sweeps[i] = (options.sweeps[i][0] - options.sweeps[i][1]/2, options.sweeps[i][1], options.sweeps[i][2]+1)
-			return (options, args)
-	return MainOptionParser()
-
-
-def run(options):
-	nf = NecFileObject(options)
-	nf.evaluate(options.chart)
-
-def main():
-#default values
-	options, args = optionParser().parse_args()
-	run(options)
-	for inp in args:
-		if inp[0]!="-":
-			options.input = inp
-			try:
-				run(options)
-			except:
-				traceback.print_exc()
-				pass
-	
-
-
-if __name__ == "__main__":
-	main()

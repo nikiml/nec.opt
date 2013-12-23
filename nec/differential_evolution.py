@@ -138,6 +138,8 @@ data members:
 
 
     self.scores = self.population_size*[1000.0]
+
+  def run(self):	
     self.optimize()
     self.best_score = float(min_value( self.scores ))
     self.best_vector = self.population[ min_index( self.scores ) ]

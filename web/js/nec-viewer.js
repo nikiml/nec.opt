@@ -342,9 +342,12 @@ var NecViewer = (function(nv) {
 	    return { color: black,
 	        last: _undefined,
 	        cl: function(t) {
-				var c = t[1] || black; 
-				this[color] = nv.colorNameToHex(c) || c[charAt](0)==='#'?c:'#'+c;
-				},
+				var c = t[1] || black, r1 = /#[0-9a-f]{3}/ , r2 = /#[0-9a-f]{6}/ ; 
+				c = nv.colorNameToHex(c) || c[charAt](0)==='#'?c:'#'+c;
+				if(r1.test(c) || r2.test(c) ){
+					this[color] = c;
+				}
+			},
 	        gw: function(t, geometry) {
 	            geometry[push](wire[create](this[color], def(t[1], 1), def(t[2], 1), [def(t[9], 0.001)], [def(t[3]), def(t[4]), def(t[5])], [def(t[6]), def(t[7]), def(t[8])]));
 	            this[last] = t;

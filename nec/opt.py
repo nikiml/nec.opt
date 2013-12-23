@@ -6,6 +6,7 @@ import nec.differential_evolution as DE
 import os, math,sys,traceback,time,random
 from nec import eval as ne
 from nec.print_out import printOut
+from datetime import datetime
 
 class NecFileEvaluator:
 
@@ -51,22 +52,30 @@ class NecFileEvaluator:
 			traceback.print_exc()
 			raise
 
+	def saveRestart(self, population, scores):
+		filename = datetime.now().strftime("restart.%y%m%d.%H%M%S.log")
+		f = open(filename,"wt")
+		f.write(self.nec_evaluator.formatName("Score")+"\t"+"\t".join(map(self.nec_evaluator.formatName, self.opt_vars))+"\n")
+		for i in range(len(population)):
+			f.write(self.nec_evaluator.formatNumber(float(scores[i]))+"\t"+"\t".join(map(self.nec_evaluator.formatNumber, population[i]))+"\n")
+		f.close()
 
 		
-	def __init__(self, options):
+	def __init__(self, nec_file_input, options):
 			#.input, options.output,options.auto_segmentation, options.sweeps, options.target_levels,options.num_cores, options.log_file, options.target_function
 		self.log = None
 		self.options = options
 		self.char_impedance = options.char_impedance
-		self.nec_file = ne.NecFileObject(options)
+		self.nec_file_input = nec_file_input
+		self.nec_evaluator = ne.NecEvaluator(nec_file_input, options)
 		#print "calculate_gain set to: %d"%self.options.calc.gain
 		
 		self.opt_vars = []
 		self.domain = []
-		for k in self.nec_file.min_max.keys():
+		for k in self.nec_file_input.min_max.keys():
 			if not self.options.parameters or k in self.options.parameters:
 				self.opt_vars.append(k)
-				self.domain.append(self.nec_file.min_max[k])
+				self.domain.append(self.nec_file_input.min_max[k])
 		self.n = len(self.opt_vars)
 #		self.domain = self.n*[[-1,1]]
 		self.enforce_domain_limits = True
@@ -74,7 +83,7 @@ class NecFileEvaluator:
 		self.best_score = 999.0
 		for i in range(len(self.opt_vars)):
 			var = self.opt_vars[i]
-			self.x.append(self.nec_file.vars[var])
+			self.x.append(self.nec_file_input.vars[var])
 
 		self.x = self.paramsBackTransform(self.x)
 		if options.restart:
@@ -94,11 +103,11 @@ class NecFileEvaluator:
 		if self.options.frequency_data:
 			self.comments.append(" Frequency angle/gain data: ")
 			self.comments.append(str(self.options.frequency_data))
-		self.comments.append("SWR target: %g"%self.options.swr_target)
+		self.comments.append("SWR target: %s"%str(self.options.swr_target) )
 		self.comments.append("Target function: %s"%self.options.target_function)
-		if self.nec_file.autosegment[0]:
-			printOut("Autosegmentation: %d per %g"%self.nec_file.autosegment)
-			self.comments.append("Autosegmentation: %d per %g"%self.nec_file.autosegment)
+		if self.nec_file_input.autosegment[0]:
+			printOut("Autosegmentation: %d per %g"%self.nec_file_input.autosegment)
+			self.comments.append("Autosegmentation: %d per %g"%self.nec_file_input.autosegment)
 		else:
 			printOut("Autosegmentation: NO")
 			self.comments.append("Autosegmentation: NO")
@@ -125,7 +134,7 @@ class NecFileEvaluator:
 				range_scores.append( "R%dms"%i)
 				range_scores.append( "R%das"%i)
 
-			self.log.write(self.nec_file.formatName("Score")+"\t"+"\t".join(map(self.nec_file.formatName, sorted(self.opt_vars)))+"\t"+"\t".join(map(self.nec_file.formatName, range_scores))+"\n")
+			self.log.write(self.nec_evaluator.formatName("Score")+"\t"+"\t".join(map(self.nec_evaluator.formatName, sorted(self.opt_vars)))+"\t"+"\t".join(map(self.nec_evaluator.formatName, range_scores))+"\n")
 			self.log.flush()
 		self.time = time.time()
 		self.start_time = self.time
@@ -137,9 +146,9 @@ class NecFileEvaluator:
 	def initialPopulation(self):
 		return (list(self.initial_population),list(self.initial_scores))
 
-	def targetLevel(self, rangeno, freqno):
+	def targetLevel(self, rangeno, freqno, levels):
 		r = self.options.sweeps[rangeno]
-		t = self.options.target_levels[rangeno]
+		t = levels[rangeno]
 		tlen = int(len(t)/2)
 		if freqno < tlen:
 			return t[freqno]
@@ -178,16 +187,16 @@ class NecFileEvaluator:
 		vector = self.paramsTransform(self.x)
 		for i in range(len(self.opt_vars)):
 			var = self.opt_vars[i]
-			self.nec_file.vars[var]=vector[i]
+			self.nec_file_input.vars[var]=vector[i]
 		fn = ("%.3f"%self.best_score)
 		fn = fn.replace(".-","-")
 		fn = fn.replace(".","_")
 		fn = fn+".nec"
 			
-		self.nec_file.writeNecInput("final"+fn)
-		self.nec_file.writeParametrized("output"+fn, comments = self.comments+["Score %g"%self.best_score,""])
+		self.nec_evaluator.writeNecInput("final"+fn)
+		self.nec_evaluator.writeParametrized("output"+fn, comments = self.comments+["Score %g"%self.best_score,""])
 		if interrupted: return
-		self.nec_file.evaluate()
+		self.nec_evaluator.evaluate()
 	
 	def iterationCallback(self, iter_no, population, scores, improved):
 		return
@@ -207,11 +216,11 @@ class NecFileEvaluator:
 				range_scores.append(range_results[i].max("swr"))
 				range_scores.append(range_results[i].ave("swr"))
 
-			range_scores = "\t"+"\t".join(map(self.nec_file.formatNumber, range_scores))
+			range_scores = "\t"+"\t".join(map(self.nec_evaluator.formatNumber, range_scores))
 				
 		else:
 			range_scores=""
-		self.log.write(self.nec_file.formatNumber(score)+"\t"+"\t".join(map(self.nec_file.formatNumber, vector))+range_scores+"\n")
+		self.log.write(self.nec_evaluator.formatNumber(score)+"\t"+"\t".join(map(self.nec_evaluator.formatNumber, vector))+range_scores+"\n")
 		self.log.flush()
 
 	class Score:
@@ -329,15 +338,15 @@ class NecFileEvaluator:
 		vector = self.paramsTransform(vector)
 		for i in range(len(self.opt_vars)):
 			var = self.opt_vars[i]
-			self.nec_file.vars[var]=vector[i]
+			self.nec_file_input.vars[var]=vector[i]
 		#print "in target_ : Get agt score = %d"%get_agt_score
-		results = self.nec_file.runSweeps(get_agt_score, use_agt,id)
+		results = self.nec_evaluator.runSweeps(get_agt_score, use_agt,id)
 		res = -1000
 		agts = {}
 		if not results:
 			if self.options.verbose: printOut( "writing erroneous file...")
 			try:
-				self.nec_file.writeParametrized("error%d.nec"%self.errors)
+				self.nec_evaluator.writeParametrized("error%d.nec"%self.errors)
 				if self.options.verbose: printOut("done")
 			except:
 				if self.options.verbose: printOut("failed")
@@ -357,7 +366,7 @@ class NecFileEvaluator:
 						if self.options.frequency_data:
 							tl = self.options.frequency_data[freq.freq][1]
 						else:
-							tl = self.targetLevel(freqid[0], freqid[1])
+							tl = self.targetLevel(freqid[0], freqid[1], self.options.target_levels)
 						if self.options.calc.gain:
 							raw_gain = freq.forwardRaw(self.options.forward_dir)
 						else:
@@ -368,13 +377,14 @@ class NecFileEvaluator:
 						range_results[freqid[0]].add("net_gain", net)
 						range_results[freqid[0]].add("raw_gain", raw_gain)
 						swr = freq.swr()
-						swr_diff = (swr - self.options.swr_target)
+						swr_target = self.targetLevel(freqid[0], freqid[1], self.options.swr_target)
+						swr_diff = (swr - swr_target)
 						range_results[freqid[0]].add("swr_diff", swr_diff)
 						range_results[freqid[0]].add("swr", swr)
 						if self.options.calc.f2r:
 							rear = freq.rearGain(self.options.rear_angle, self.options.backward_dir) 
 							if rear is None: 
-								raise RuntimeError("Failed to calculated F/R")
+								raise RuntimeError("Failed to calculate F/R")
 						else:
 							rear = 0
 						if self.options.calc.beam_width:
@@ -382,19 +392,21 @@ class NecFileEvaluator:
 							range_results[freqid[0]].add("beam_width", beam)
 						#print "freq %g, target level %g, net %g, freqno %d, gaindiff %g, swrdiff %g"%(freq.freq, tl, freq.net(),freqid[0], gain_diff, swr_diff)
 						f2r = (net-rear)
-						f2r_diff = self.options.f2r_target-f2r
+						f2r_target = self.targetLevel(freqid[0], freqid[1], self.options.f2r_target)
+						f2r_diff = f2r_target-f2r
 						range_results[freqid[0]].add("f2r_diff", f2r_diff)
 						range_results[freqid[0]].add("f2r", f2r)
 						if self.options.calc.f2b:
 							back = freq.backwardGain(self.options.backward_dir) 
 							if back is None: 
-								raise RuntimeError("Failed to calculated F/B")
+								raise RuntimeError("Failed to calculate F/B")
 						else:
 							back = 0
 						range_results[freqid[0]].add("back", back)
 						range_results[freqid[0]].add("rear", rear)
 						f2b = (net-back)
-						f2b_diff = self.options.f2b_target-f2b
+						f2b_target = self.targetLevel(freqid[0], freqid[1], self.options.f2b_target)
+						f2b_diff = f2b_target-f2b
 						range_results[freqid[0]].add("f2b_diff", f2b_diff)
 						range_results[freqid[0]].add("f2b", f2b)
 
@@ -407,11 +419,12 @@ class NecFileEvaluator:
 #						range_results[freqid[0]].add(gain_diff, swr_diff, f2r_diff)
 				import pprint
 				if self.options.debug>1 : pprint.pprint(map(lambda x: x.data,range_results))
-				d = {}
+				d = {"results":[ r.data for r in range_results]}
 				freq_count=0
 				log_keys = ["gain_diff", "net_gain", "raw_gain", "f2r_diff", "f2r", "f2b_diff", "back", "rear", "ml"]
 				all_keys = []
-				for result in range_results:
+				for i in range(len(self.options.sweeps)):
+					result=range_results[i]
 					c = 0
 					for k in result.data.keys():
 						if k not in all_keys: all_keys.append(k)
@@ -464,7 +477,7 @@ class NecFileEvaluator:
 
 	
 				if self.options.debug > 1 : pprint.pprint(d)
-				d.update(self.nec_file.globals)
+				d.update(self.nec_file_input.globals)
 				res = eval(self.options.target_function, d)
 	
 			except:
@@ -485,8 +498,8 @@ class NecFileEvaluator:
 		sorted_vect = [x[1] for x in z]
 
 		if self.options.verbose:
-			printOut( "\t".join(map(self.nec_file.formatName, sorted_vars)))
-			printOut( "\t".join(map(self.nec_file.formatNumber, sorted_vect)))
+			printOut( "\t".join(map(self.nec_evaluator.formatName, sorted_vars)))
+			printOut( "\t".join(map(self.nec_evaluator.formatNumber, sorted_vect)))
 			printOut( res )
 			printOut( "\n" )
 		elif not self.options.quiet:
@@ -495,7 +508,6 @@ class NecFileEvaluator:
 		if self.log:
 			self.logParamVector(sorted_vect,res, range_results)
 			self.log.flush()
-#			self.log.write(self.nec_file.formatNumber(res)+"\t"+"\t".join(map(self.nec_file.formatNumber, vector))+"\n")
 
 		if res < self.best_score:
 			self.best_score = res
@@ -504,7 +516,7 @@ class NecFileEvaluator:
 				fn = fn.replace(".-","-")
 				fn = fn.replace(".","_")
 				fn = fn+".nec"
-				self.nec_file.writeParametrized(fn, comments = self.comments+["Score %g"%res,""])
+				self.nec_evaluator.writeParametrized(fn, comments = self.comments+["Score %g"%res,""])
 			if self.options.quiet :
 				printOut("Best score : %.5f"%res)
 			elif self.options.local_search and not self.options.verbose:
@@ -525,46 +537,60 @@ class NecFileEvaluator:
 		else: sys.stdout.write('\n')
 		if not improved: printOut( "% 5s. Min score %g, Mean score %g, IterTime(%d sec)"%(str(count), minv, meanv, int(t)) )
 		else : printOut( "% 5s. Min score %g, Mean score %g, Improved %d members, IterTime(%d sec)"%(str(count), minv, meanv, improved, int(t)))
-		if self.options.verbose:printOut( "\t".join(map(self.nec_file.formatName, sorted_vars)) )
-		if self.options.verbose:printOut( "\t".join(map(self.nec_file.formatNumber, sorted_vect)) )
+		if self.options.verbose:printOut( "\t".join(map(self.nec_evaluator.formatName, sorted_vars)) )
+		if self.options.verbose:printOut( "\t".join(map(self.nec_evaluator.formatNumber, sorted_vect)) )
 		if self.options.verbose:printOut( "=====================================================================" )
 
 
-def optionsParser():
+def optionParser():
 	class MainOptionParser(ne.OptionParser):
 		def __init__(self):
 			ne.OptionParser.__init__(self)
 			self.add_option("--noagt-correction", default=False, action="store_true")
 			self.add_option("-l", "--log-file", default="opt.log",metavar="FILE", help="log file. The default is %default.")
-			self.add_option("-S", "--seed-with-input", default=False, action="store_true", help="use the input file as one of the population members")
+			self.add_option("-S", "--seed-with-input", default=False, action="store_true", help="use the input file as one of the population members (creates bias towards the input file if it has a good score)")
 			self.add_option("-t", "--target-level", dest="target_levels", default=[], metavar="TARGET_LEVEL", action="append", type="string", help="appends target level(s) for a sweep, the number of target levels must match the number of sweeps and they are paired positionally. Examples1: -s (174,6,8) -t (8,9) means target levels linearly increasing from 8 to 9 for the frequencies from 174 to 216. Example2: -s (174,6,8) -t (8, 8.5, 9.5, 9) means target levels of 8 for 174, 9 for 216 and gradually increasing levels from 8.5 to 9.5 for the range 180 to 210")
 			self.add_option("-M", "--max-iter", default=10000, type="int", help="The default is %default. The script can be interrupted with Ctrl+C at any time and it will output its current best result as 'output.nec'")
 			self.add_option("-L", "--local-search", action="store_true", default = False)
 			self.add_option("-T", "--local-search-tolerance", default = .0001, type="float")
-			self.add_option("-F", "--target-function", default = "max(max_gain_diff, max_swr_diff)", type='string', help="An expression composed of statistical tokens and any of the nec file parameters, by default it is '%default'. All statistical tokes are of the form min_\"value\", max_\"value\", ave_\"value\", min_ave_\"value\", max_ave_\"value\", ave_min_\"value\" and ave_max_\"value\", where \"value\" is one of the following: gain_diff, swr_diff, f2r_diff, f2b_diff, net_gain, raw_gain, ml, swr, agt_correction, f2r, f2b, real and  imag.")
-			self.add_option( "--swr-target", default = 2.0, type='float', help="the default value is %default")
-			self.add_option( "--f2r-target", default = 15.0, type='float', help="the default value is %default")
-			self.add_option( "--f2b-target", default = 15.0, type='float', help="the default value is %default")
-#			self.add_option( "--desqi", default = False, action="store_true")
-#			self.add_option( "--nmde", default = False, action="store_true")
+			self.add_option("-F", "--target-function", default = "max(max_gain_diff, max_swr_diff)", type='string', help="An expression composed of statistical tokens and any of the nec file parameters, by default it is '%default'. All statistical tokes are of the form min_\"value\", max_\"value\", ave_\"value\", min_ave_\"value\", max_ave_\"value\", ave_min_\"value\" and ave_max_\"value\", where \"value\" is one of the following: gain_diff, swr_diff, f2r_diff, f2b_diff, net_gain, raw_gain, ml, swr, agt_correction, f2r, f2b, real and  imag. A full access to all results per frequency is also provided for the same tokens. For example, results[0] gives access to all results for the first sweep, results[0][\"net_gain\"] is an array of all net gains for all frequencies of the first sweep, and finally results[0][\"net_gain\"][0] gives the net gain for the first frequency of the first sweep. The numeric indices are from 0 to count-1, where count is the number of sweeps for the first index and the number of frequencies for the second.")
+			self.add_option( "--swr-target", default=[], type='string', action="append", help="defines the swr target curve in the same way as target gain is defined. the default value is flat swr (2,2). One per sweep can be specified. The last one defined is used as default if the sweeps are more.")
+			self.add_option( "--f2r-target", default=[], type='string', action="append", help="defines the f2r target curve in the same way as target gain is defined. the default value is flat f2r (15,15). One per sweep can be specified. The last one defined is used as default if the sweeps are more.")
+			self.add_option( "--f2b-target", default=[], type='string', action="append", help="defines the f2b target curve in the same way as target gain is defined. the default value is flat f2b (15,15). One per sweep can be specified. The last one defined is used as default if the sweeps are more.")
 			self.add_option( "--de-dither", default = .1, type="float")
 			self.add_option( "--de-f", default = 0.55, type="float", help="The DE's differential parameter. Should be >.5, the default is %default")
 			self.add_option( "--de-cr", default = .9, type="float", help = "The DE's crossover parameter, the default is %default")
 			self.add_option( "--de-np", default = 50, type="int", help="The DE's population size parameter. The literature recommends to use 10*(optimization_parameters). The defaults is %default")
-			self.add_option("-P", "--output-population", default = False, action="store_true", help="output the full population in the log file after every iteration.")
+			self.add_option("-P", "--output-population", default = False, action="store_true", help="IGNORED")
 			self.add_option("-b", "--output-best", default = -1, help="set to 0 or 1 to output the best score nec file as 'best.nec'. Default is -1 (output if not in local search)." )
 			self.add_option("-p", "--parameters", default = "", help="If not empty restrict the list of optimization parameters to this list." )
 			self.add_option("-r", "--restart", default = "", metavar="RESTART_FILE", help="restart from population saved in a file." )
 			self.add_option("--omni", default=0, action="store_true", help="parse all horizontal angles")
-			self.add_option("--quiet", default=False, action="store_true", help="diable all output but errors")
+			self.add_option("--quiet", default=False, action="store_true", help="disable all output but errors")
 			self.add_option("--verbose", default=False, action="store_true", help="enables extra output")
 			self.add_option("--strict-max-target", default=False, action="store_true", help="use if your taget function has no averaging i.e. if the result for a single frequency can be used to declare a model as worse in comperison with the score of another model. The default target function max(max_swr_diff,max_gain_diff) is an example of such function. Setting this option will speed up the optimization, but it has to be used correctly.")
 			self.add_option("--profile", default=False, action="store_true")
 
-			
-		def parse_args(self):
-			options, args = ne.OptionParser.parse_args(self)
-			if options.target_levels: options.target_levels = list(map(eval, options.target_levels))
+		def convertToListOfLists(self, _list, size=None, default=None):
+			if size is not None and len(_list) < size:
+				if default is None :
+					if not _list: return
+					else: default  = _list[-1]
+				while (len(_list) < size):
+					_list.append(default)
+			for i in range(len(_list)):
+				if type(_list[i])== type(()):
+					_list[i] = list(_list[i])
+				if type(_list[i])!= type([]):
+					_list[i] = [_list[i], _list[i]]
+			return _list
+		def parse_args(self, extra_args=[]):
+			options, args = ne.OptionParser.parse_args(self, extra_args)
+			if not options.sweeps: return (options,args)
+			if options.target_function:
+				options.target_function = options.target_function.strip('"')
+				options.target_function = options.target_function.strip("'")
+			if options.target_levels: options.target_levels = self.convertToListOfLists(list(map(eval, options.target_levels)) )
 			options.parameters = options.parameters.replace(',',' ').split()
 			if options.output_population :
 				sys.stderr.write("WARNING: --output-population is IGNORED.\n")
@@ -580,13 +606,16 @@ def optionsParser():
 				printOut( "Output best set to: %d" % options.output_best)
 			options.html=""
 
-			if  len(options.sweeps)!=len(options.target_levels) and not options.frequency_data:
+			if options.sweeps and len(options.sweeps)!=len(options.target_levels) and not options.frequency_data:
 				raise RuntimeError("The number of sweep ranges is not matching the number of target options")
-			if not options.sweeps:
-				options.sweeps = [(470,6,40)]
-				options.target_levels = [(10.,10.)]
-				options.target_function = "max_gain_diff"
-				sys.stderr.write("WARNING: No sweeps parameters specified\n")
+			
+			if options.sweeps:
+				if options.swr_target: options.swr_target = self.convertToListOfLists(list(map(eval, options.swr_target)), len(options.sweeps), 2)
+				else: options.swr_target = self.convertToListOfLists([], len(options.sweeps), 2)
+				if options.f2r_target: options.f2r_target = self.convertToListOfLists(list(map(eval, options.f2r_target)), len(options.sweeps), 15)
+				else: options.f2r_target = self.convertToListOfLists([], len(options.sweeps), 2)
+				if options.f2b_target: options.f2b_target = self.convertToListOfLists(list(map(eval, options.f2b_target)), len(options.sweeps), 15)
+				else: options.f2b_target = self.convertToListOfLists([], len(options.sweeps), 2)
 			class Calc: pass
 			options.calc = Calc()
 			options.calc.beam_width = (options.target_function.find("beam_width")!=-1)
@@ -600,11 +629,11 @@ def optionsParser():
 			if not options.quiet: 
 				printOut("Target levels set to:")
 				printOut( options.target_levels)
-			if not options.quiet: printOut( "SWR target level set to: %g:"% options.swr_target)
+			if not options.quiet: printOut( "SWR target level set to: %s:"% str(options.swr_target))
 			if options.calc.f2r : 
-				if not options.quiet: printOut( "F/R target level set to: %g:"% options.f2r_target )
+				if not options.quiet: printOut( "F/R target level set to: %s:"% str(options.f2r_target) )
 			if options.calc.f2b : 
-				if not options.quiet: printOut( "F/B target level set to: %g:"% options.f2b_target )
+				if not options.quiet: printOut( "F/B target level set to: %s:"% str(options.f2b_target) )
 			if not options.quiet: printOut( "Target function set to \"%s\"" % options.target_function )
 			if not options.quiet: 
 				if not options.noagt_correction:
@@ -617,17 +646,20 @@ def optionsParser():
 	return MainOptionParser()
 
 
-def optimize(options):
-	evaluator = NecFileEvaluator(options)
+def optimize(nec_file_input, options):
+	evaluator = NecFileEvaluator(nec_file_input, options)
 	ins_sol_vec = None
 	if options.seed_with_input:
 		ins_sol_vec = evaluator.x
 	try:
 		if not options.local_search:
 			de_plugin = None
-			#if options.desqi:
-			#	de_plugin = DE.DESQIPlugin()
-			optimiser = DE.differential_evolution_optimizer(evaluator, population_size = options.de_np, f = options.de_f, cr = options.de_cr, show_progress=1, insert_solution_vector=ins_sol_vec, max_iter=options.max_iter, dither=options.de_dither)
+			try:
+				optimizer = DE.differential_evolution_optimizer(evaluator, population_size = options.de_np, f = options.de_f, cr = options.de_cr, show_progress=1, insert_solution_vector=ins_sol_vec, max_iter=options.max_iter, dither=options.de_dither)
+				optimizer.run()
+			except KeyboardInterrupt:
+				evaluator.saveRestart(optimizer.population, optimizer.scores)
+				raise
 		else:
 			from nec import simplex
 			if not options.quiet: printOut( "N=%d"%len(evaluator.x))
@@ -639,13 +671,19 @@ def optimize(options):
 
 def main():
 	random.seed()
-	options, args = optionsParser().parse_args()
+	from nec.input import NecInputFile
+	options, inputs = optionParser().parse_args()
+	nec_file_input = NecInputFile(options.input, options.debug)
+	if  "OPT" in nec_file_input.cmd_options:
+		import shlex
+		options, args = optionParser().parse_args(shlex.split(nec_file_input.cmd_options["OPT"] ) )
 	options.agt_correction = not options.noagt_correction
+	options.angle_step = nec_file_input.angle_step
 	if options.profile:
 		import cProfile
-		cProfile.runctx('optimize(options)',globals(), locals())
+		cProfile.runctx('optimize(nec_file_input, options)',globals(), locals())
 	else:
-		optimize(options)
+		optimize(nec_file_input, options)
 
 
 if __name__ == "__main__": 

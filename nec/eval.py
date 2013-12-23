@@ -6,7 +6,7 @@ from nec import necmath
 from nec.wire_structure import WireStructure
 from nec.print_out import printOut
 from nec.output_parser import FrequencyData, NecOutputParser
-from nec.html import jsModelFromLines, HtmlOutput
+from nec.html import HtmlOutput
 
 output = "output"
 input = "input.nec"
@@ -30,277 +30,30 @@ class Sweep:
 		if not total: return 0
 		return total / len(self.ranges)
 
-class NecFileObject:
-	def __init__(self, options):
+class NecEvaluator:
+	def __init__(self, nec_file_input, options):
 		self.options = options
+		self.nec_file_input = nec_file_input
 		self.wire_structure = WireStructure(options)
-		self.vars = {}
-		self.min_max = {}
-		self.dependent_vars = []
-		self.lines=[]
-		self.varlines=[]
-		self.paramlines={}
-		self.source_tags={}
-		self.autosegment=(0,0)
-		self.frequency = 585
-		self.scale = 1
-		self.options.angle_step = 5
 		if options.engine_takes_cmd_args=='yes' or options.engine_takes_cmd_args=='auto' and os.name!='nt':
 			self.options.engine_takes_cmd_args = 1
 		else: self.options.engine_takes_cmd_args = 0
-		try:self.write_js_model = options.js_model
-		except AttributeError: self.write_js_model=0
 		if self.options.input:
-			self.html_output = HtmlOutput(self.options.input)
-			self.readSource(self.options.input)
+			self.html_output = HtmlOutput(self.nec_file_input.input)
 			try:
 				if self.options.param_values_file:
 					self.parseParameterValues(self.options.param_values_file)
 					self.writeParametrized("output.nec")
 			except AttributeError:
 				pass
-		self.autoSegmentation(self.options.auto_segmentation)
+		self.nec_file_input.autoSegmentation(self.options.auto_segmentation)
 		self.prepareSweeps()
 		if self.options.debug:
 			printOut( "Engine jobs:")
 			pprint.pprint(self.sweeps)
 
-	def readSource(self, sourcefile):
-		if self.options.debug: sys.stderr.write("debug: Opening file %s\n"%sourcefile)
-		self.options.input = sourcefile
-		file = open(sourcefile, "rt")
-		try: self.lines = file.readlines()
-		finally: file.close()
-		if not self.lines: raise "Empty input file"
-		self.parse()
-	
-	def evalVarLine(self, line, g=None, l=None):
-		ln = line.replace("^","**")
-		if l is None:
-			d={}
-			exec(ln, {}, d)
-			return d
-		else:
-			exec(ln, g, l)
-
-	class TagRecorder:
-		def addTransformation(self, line):
-			inc = int(self.parser.evalToken(line[1]))
-			new = line[2].strip()
-			if line[0]=="GX": 
-				new = (1+int(new[0]))*(1+int(new[1]))*(1+int(new[2]))
-			else:
-				new = int(self.parser.evalToken(new))
-				if line[0]=="GR": new-=1
-			self.update(new, inc)
-
-	class TagSegmentation(TagRecorder):
-		def __init__(self, parser):
-			self.tag_segmentation = {}
-			self.fixed_segmentation = []
-			self.parser = parser
-		def addWire(self, line, varlineno):
-			tag = int(line[1])
-			segments = int(self.parser.evalToken(line[2]))
-			if tag not in self.tag_segmentation:
-				self.tag_segmentation[tag] = [segments]
-			else:
-				self.tag_segmentation[tag].append(segments)
-			if line[2][0] == "+":
-				self.fixed_segmentation.append(varlineno)
-		def update(self, new, inc):
-			ts = {}
-			for i in range(0,new):
-				for t in self.tag_segmentation.keys():
-					ts[t+i*inc] = list(self.tag_segmentation[t])
-			self.tag_segmentation.update(ts)
-		def tagSegments(self, tag, ref_card):
-			if tag not in self.tag_segmentation.keys():
-				raise RuntimeError("Invalid tag reference %d in %s card" %(tag,ref_card))
-			if len(self.tag_segmentation[tag])>1:
-				raise RuntimeError("Ambiguous tag reference %d in %s card" %(tag,ref_card))
-			return self.tag_segmentation[tag][0]
-
-		def autoSegment(self, varlineno):
-			return varlineno not in self.fixed_segmentation
-
-	class TagRadii(TagRecorder):
-		def __init__(self):
-			self.tag_rad = {}
-		def addWire(self, tag, rad):
-			tag = int(tag)
-			rad = rad
-			if tag not in self.tag_rad:
-				self.tag_rad[tag] = [rad]
-			else:
-				self.tag_rad[tag] += [rad]
-		def update(self, new, inc):
-			tr = {}
-			for i in range(0,new):
-				for t in self.tag_rad.keys():
-					tr[t+i*inc] = list(self.tag_rad[t])
-			self.tag_rad.update(tr)
-		def tagRadius(self, tag, ref_card):
-			if not tag:
-				for k in self.tag_rad.keys():
-					return self.tag_rad[k][0]
-			if tag not in self.tag_rad.keys():
-				raise RuntimeError("Invalid tag reference %d in %s card" %(tag,ref_card))
-			return self.tag_rad[tag][0]
-
-
-
-	class SegRef:
-		def __init__(self, varlineno, lineno, tokenno, segno, segcount):
-			self.varline_no = varlineno
-			self.line_no = lineno 
-			self.token_no = tokenno 
-			self.seg_no = segno
-			self.seg_count = segcount
-		def isStart(self):
-			return self.seg_no==1
-		def isEnd(self):
-			return self.seg_no==self.seg_count
-		def isMid(self):
-			return 2*self.seg_no==self.seg_count+1
-
-		def newSegNo(self, seg_count):
-			if self.isMid():
-				return (seg_count+1)/2
-			if self.isStart():
-				return 0
-			if self.isEnd():
-				return seg_count
-			return round( (self.seg_no-.5)/self.seg_count*seg_count +.5)
-
-	def checkNonZeroTag(self, tag, card):
-		if not tag: raise RuntimeError("Tag 0 is not supported in %s card"%card)
-
-
-	def parseSYLine(self, ln, comment, lineno):
-		if self.options.debug >1: sys.stderr.write("debug: \tParsing line: \"%s\"\n"%ln)
-		try:
-			d = self.evalVarLine(ln[3:].strip())
-			if self.options.debug: 
-				for dk in d.keys(): sys.stderr.write("debug: \tAdded independent parameter \"%s\"\n"%dk)
-				if self.options.debug>1: sys.stderr.write("debug: \t\tFull comment = \"%s\"\n"%comment)
-			self.vars.update(d)
-			for dk in d.keys(): self.paramlines[dk]=lineno
-			try:
-				#strip the real comment from the comment
-				comment_pos = comment.find("'")
-				if comment_pos!=-1:
-					comment = comment[0:comment_pos].strip()
-				if self.options.debug>1: 
-					sys.stderr.write("debug: \t\tLimits comment = \"%s\"\n"%comment)
-				min, max = eval(comment)
-				if min <= max:
-					for dk in d.keys(): self.min_max[dk]=(float(min),float(max))
-				else:
-					for dk in d.keys(): self.min_max[dk]=(float(max),float(min))
-				if self.options.debug: sys.stderr.write("debug: \t\tlimits(%.3g, %.3g)\n"%(float(min), float(max)))
-			except:
-				if self.options.debug>1: 
-					for dk in d.keys(): sys.stderr.write("debug: \tNo limits found for parameter \"%s\"\n"%dk)
-				pass
-			self.globals.update(d)
-		except:
-			if self.options.debug: sys.stderr.write("debug: \tAdded dependent parameter \"%s\"\n"%ln[3:].strip())
-			self.dependent_vars.append(ln[3:].strip())
-			try: self.evalVarLine(self.dependent_vars[-1],necmath.__dict__, self.globals)
-			except:
-				traceback.print_exc()
-				sys.stderr.write( "failed parsing '%s'\n"%(d))
-				raise
-	def parseEXLine(self, varline, varlineno, lineno):
-		tag = int(varline[2])
-		seg = int(self.evalToken(varline[3]))
-		segments = self.tag_segmentation.tagSegments(tag, varline[0])
-		seg_ref = NecFileObject.SegRef(varlineno, lineno, 3, seg, segments)
-		if tag not in self.source_tags:
-			self.source_tags[tag]=[seg_ref]
-		else:
-			self.source_tags[tag].append(seg_ref)
-
-	def parseNTOrTLLine(self, varline, varlineno, lineno):
-		tag = int(varline[1])
-		self.checkNonZeroTag(tag,varline[0])
-		seg = int(self.evalToken(varline[2]))
-		segments = self.tag_segmentation.tagSegments(tag, varline[0])
-		seg_ref = NecFileObject.SegRef(varlineno, lineno, 2, seg, segments)
-		if tag not in self.source_tags:
-			self.source_tags[tag]=[seg_ref]
-		else:
-			self.source_tags[tag].append(seg_ref)
-		tag = int(varline[3])
-		self.checkNonZeroTag(tag,varline[0])
-		seg = int(self.evalToken(varline[4]))
-		segments = self.tag_segmentation.tagSegments(tag, varline[0])
-		seg_ref = NecFileObject.SegRef(varlineno, lieno, 4, seg, segments)
-		if tag not in self.source_tags:
-			self.source_tags[tag]=[seg_ref]
-		else:
-			self.source_tags[tag].append(seg_ref)
-
-	def parseLDLine(self, varline, varlineno, lineno):
-		tag = int(varline[2])
-		seg1 = int(self.evalToken(varline[3]))
-		seg2 = int(self.evalToken(varline[4]))
-		if seg1: 
-			self.checkNonZeroTag(tag,varline[0])
-			segments = self.tag_segmentation.tagSegments(tag, varline[0])
-			seg1_ref = NecFileObject.SegRef(varlineno, lineno, 3, seg1, segments)
-			seg2_ref = NecFileObject.SegRef(varlineno, lineno, 4, seg2, segments)
-			if tag not in self.source_tags:
-				self.source_tags[tag]=[seg1_ref,seg2_ref]
-			else:
-				self.source_tags[tag]+=[seg1_ref,seg2_ref]
-
-	def parse(self):		
-		if self.options.debug: sys.stderr.write("debug: Parsing input\n")
-		self.vars = {}
-		self.dependent_vars = []
-		self.globals={}
-		self.varlines=[]
-		self.source_tags={}
-		self.comments = []
-		self.fixed_segmentation = []
-		self.tag_segmentation = NecFileObject.TagSegmentation(self)
-		for i in range(len(self.lines)):
-			ln = self.lines[i].strip('\n')
-			comment_pos = ln.find("'")
-			if comment_pos!=-1:
-				comment = ln[comment_pos+1:].strip()
-				ln = ln[0:comment_pos].strip()
-			else:
-				comment = ""
-				ln = ln.strip()
-			if ln[0:2]== "SY":
-				self.parseSYLine(ln, comment, i)
-			else:
-				self.varlines.append(ln.replace(',',' ').split())
-				self.comments.append(comment)
-				varlineno = len(self.varlines)-1
-				varline = self.varlines[varlineno]
-				if ln[0:2]=="GW":
-					self.tag_segmentation.addWire(varline, varlineno)
-				if ln[0:2]=="GM" or ln[0:2]=="GR" or ln[0:2]=="GX":
-					self.tag_segmentation.addTransformation(varline)
-				if ln[0:2]=="EX":
-					self.parseEXLine(varline,varlineno, i)
-				if ln[0:2]=="TL" or ln[0:2]=="NT":
-					self.parseNTOrTLLine(varline,varlineno, i)
-				if ln[0:2]=="LD":
-					self.parseLDLine(varline,varlineno, i)
-				elif ln[0:2] == "FR":
-					self.frequency = float(self.varlines[-1][5])
-				elif ln[0:2] == "GS":
-					self.scale = float(self.varlines[-1][3])
-				elif ln[0:2] == "RP":
-					self.options.angle_step = float(self.varlines[-1][8])
-
-		for i in self.vars.keys():
-			self.vars[i]=float(self.vars[i])
+	def writeParametrized(self, filename, extralines=[], skiptags=[], comments=[]):
+		self.nec_file_input.writeParametrized(filename, extralines, skiptags, comments)
 
 	def parseParameterValues(self, file):
 		try:
@@ -313,11 +66,7 @@ class NecFileObject:
 		vars = lines[0].split()
 		del lines[0]
 		lines[0] = list(map(float, lines[0].split()))
-		opt_vars = {}
-		for i in range(len(vars)):
-			if vars[i] not in self.vars: raise RuntimeError("invalid Parameter name")
-			self.vars[vars[i]] = lines[0][i]
-
+		self.nec_file_input.updateVars(vars, lines[0])
 
 	def parseAgt(self, output):
 		file = open(output, "rt")
@@ -332,42 +81,9 @@ class NecFileObject:
 			if lines[i][0:testl]==tests:
 				return float(lines[i][testl+1:].strip().split()[0].lower())
 			i=i-1
+		raise RuntimeError("Failed to parse AGT result")
 		return 1
-
-	def calcLength(self, line):
-		return self.scale*necmath.sqrt(necmath.pow(line[2]-line[5],2)+necmath.pow(line[3]-line[6],2)+necmath.pow(line[4]-line[7],2))
-
-	def autoSegment(self, line):
-		length = self.calcLength(line) 
-		nsegs = length*self.autosegment[0]/self.autosegment[1]
-		line[1] = max(int(nsegs+.5),1)
-		tag = line[0]
-		segs = line[1]
-		if tag in self.source_tags:
-			if segs > 2: segs+=2
-			if segs % 2 == 0:
-				segs+=1
-			line[1]=segs
-			for seg_ref in self.source_tags[tag]:
-				self.varlines[seg_ref.varline_no][seg_ref.token_no] = str(seg_ref.newSegNo(segs))
-				self.lines[seg_ref.line_no] = " ".join(self.varlines[seg_ref.varline_no])
 		
-
-	def autoSegmentation(self, segs_per_halfwave=0, freq = None):
-		if not freq: freq = self.frequency
-		if not freq: freq = 585
-		halfwave = 150.0/freq
-		self.autosegment = (segs_per_halfwave, halfwave)
-		#printOut("Autosegmentation set at %d per %g (freq=%f)"%(segs_per_halfwave, halfwave, freq))
-		
-	def writeSource(self, filename):
-		file = open(filename, "wt")
-		try: file.writelines(self.lines)
-		finally: file.close()
-	
-	def evalToken(self, x):
-		return eval(x, necmath.__dict__,self.globals)
-
 	def formatNumber(self, n, fixed_width=1):
 		if type(n) == type(.1):
 			if fixed_width:
@@ -380,185 +96,120 @@ class NecFileObject:
 	def formatName(self, n):
 		return "%8s"%n
 
-	def updateGlobalVars(self):
-		self.globals={}
-		self.globals.update(self.vars)
-		for d in self.dependent_vars:
-			try: self.evalVarLine(d,necmath.__dict__, self.globals)
-			except:
-				traceback.print_exc()
-				sys.stderr.write( "failed parsing '%s'\n"%(d))
-				raise
-		
-	def necInputLines(self, frequency, skiptags=["FR", "XQ", "RP", "EN"]):
+	def necInputLines(self, frequency, skipcards=["FR", "XQ", "RP", "EN"]):
 		lines=[]
 		math_lines = []
 		comments = []
-		self.updateGlobalVars()
-		tag_radii = NecFileObject.TagRadii()
-		for li in range(len(self.varlines)):
-			ln = self.varlines[li]
-			comment = self.comments[li]
+		self.nec_file_input.updateGlobalVars()
+		varlines = self.nec_file_input.srclines
+		comments = self.nec_file_input.comments
+		fn = lambda x:self.formatNumber(x,0)
+		ev = lambda x:self.nec_file_input.evalToken(x)
+		for li in range(len(varlines)):
+			ln = varlines[li]
+			comment = comments[li]
 			if not ln: continue
-			fn = lambda x:self.formatNumber(x,0)
-			if ln[0].strip() != "GW":
-				cmdtag = ln[0].strip()
-				if cmdtag not in skiptags:
-					try:
-						sline = list(map( self.evalToken , ln[1:]))
-						sline = map(fn, sline)
-						lines.append(ln[0]+" "+" ".join(sline))
-					except:
-						lines.append(" ".join(ln))
-				if cmdtag == "GX":
-					i1 = int(self.evalToken(ln[1]))
+			neccard = ln[0].strip().upper()
+			if neccard not in  ["GW","GA","GH"]:
+				if neccard  in skipcards:
+					assert neccard not in ["GX","GM","GR","GR","SC","GC","NT","TL","LD"]
+					continue
+				try:
+					sline = list(map( ev , ln[1:]))
+					sline = map(fn, sline)
+					lines.append(ln[0]+" "+" ".join(sline))
+				except:
+					lines.append(" ".join(ln))
+
+				if neccard == "GX":
+					i1 = int(ev(ln[1]))
 					self.wire_structure.mirrorStructure(math_lines,comments, i1, int(ln[2][0]), int(ln[2][1]), int(ln[2][2]))
-					if not "GX" in skiptags:
-						lines[-1]="GX %d %s"%(i1,ln[2])
-				elif cmdtag == "GM":
+					lines[-1]="GX %d %s"%(i1,ln[2])
+				elif neccard == "GM":
 					if len(ln) < 10:
 						ln=ln+(10-len(ln))*[".0"]
-					i1 = int(self.evalToken(ln[1]))
-					i2 = int(self.evalToken(ln[2]))
-					f3 = self.evalToken(ln[3])
-					f4 = self.evalToken(ln[4])
-					f5 = self.evalToken(ln[5])
-					f6 = self.evalToken(ln[6])
-					f7 = self.evalToken(ln[7])
-					f8 = self.evalToken(ln[8])
-					i9 = int(self.evalToken(ln[9]))
+					i1 = int(ev(ln[1]))
+					i2 = int(ev(ln[2]))
+					f3 = ev(ln[3])
+					f4 = ev(ln[4])
+					f5 = ev(ln[5])
+					f6 = ev(ln[6])
+					f7 = ev(ln[7])
+					f8 = ev(ln[8])
+					i9 = int(ev(ln[9]))
 					self.wire_structure.moveCopyStructure(math_lines,comments, i1, i2, f3, f4, f5, f6, f7, f8, i9)
-					if not "GM" in skiptags:
-						lines[-1]="GM %d %d %f %f %f %f %f %f %d"%(i1, i2, f3, f4, f5, f6, f7, f8, i9)
-				elif cmdtag == "GR":
-					i1 = int(self.evalToken(ln[1]))
-					i2 = int(self.evalToken(ln[2]))
+					lines[-1]="GM %d %d %f %f %f %f %f %f %d"%(i1, i2, f3, f4, f5, f6, f7, f8, i9)
+				elif neccard == "GR":
+					i1 = int(ev(ln[1]))
+					i2 = int(ev(ln[2]))
 					self.wire_structure.rotateStructure(math_lines,comments, i1, i2)
-					if not "GR" in skiptags:
-						lines[-1]="GR %d %d"%(i1, i2)
-				elif cmdtag == "SP":
+					lines[-1]="GR %d %d"%(i1, i2)
+				elif neccard == "SP":
 					i1 = int(ln[1])
-					i2 = int(self.evalToken(ln[2]))
-					if not "SP" in skiptags:
-						lines[-1]="SP %d %d "%(i1, i2)+" ".join(list(map( fn, map( self.evalToken , ln[3:]))))
-				elif cmdtag == "SM":
-					i1 = int(self.evalToken(ln[1]))
-					i2 = int(self.evalToken(ln[2]))
-					if not "SM" in skiptags:
-						lines[-1]="SM %d %d "%(i1, i2)+" ".join(list(map( fn, map( self.evalToken , ln[3:]))))
-				elif cmdtag == "SC":
+					i2 = int(ev(ln[2]))
+					lines[-1]="SP %d %d "%(i1, i2)+" ".join(list(map( fn, map( ev , ln[3:]))))
+				elif neccard == "SM":
+					i1 = int(ev(ln[1]))
+					i2 = int(ev(ln[2]))
+					lines[-1]="SM %d %d "%(i1, i2)+" ".join(list(map( fn, map( ev , ln[3:]))))
+				elif neccard == "SC" or neccard == "GC":
 					i1 = int(ln[1])
 					i2 = int(ln[2])
-					if not "SC" in skiptags:
-						lines[-1]="SC %d %d "%(i1, i2)+" ".join(list(map( fn, map( self.evalToken , ln[3:]))))
-				elif cmdtag == "NT" or cmdtag == "TL" :
+					lines[-1]="%s %d %d "%(neccard, i1, i2)+" ".join(list(map( fn, map( ev , ln[3:]))))
+				elif neccard == "NT" or neccard == "TL" :
 					i1 = int(ln[1])
 					i2 = int(ln[2])
 					i3 = int(ln[3])
 					i4 = int(ln[4])
-					if not cmdtag in skiptags:
-						lines[-1]="%s %d %d %d %d "%(cmdtag, i1, i2, i3, i4)+" ".join(list(map( fn, map( self.evalToken , ln[5:]))))
-				elif cmdtag == "LD":
+					lines[-1]="%s %d %d %d %d "%(neccard, i1, i2, i3, i4)+" ".join(list(map( fn, map( ev , ln[5:]))))
+				elif neccard == "LD":
 					ldtype = int(ln[1].strip())
 					if ldtype > 7:
 						raise RuntimeError("Loads (LD) of type > 7 are not know to this script")
 					elif ldtype == 6:
-						i2 = int(self.evalToken(ln[2]))
-						i3 = int(self.evalToken(ln[3]))
-						i4 = int(self.evalToken(ln[4]))
-						Q = self.evalToken(ln[5])
+						i2 = int(ev(ln[2]))
+						i3 = int(ev(ln[3]))
+						i4 = int(ev(ln[4]))
+						Q = ev(ln[5])
 						if not Q: Q = 100
-						L = self.evalToken(ln[6])
-						C = self.evalToken(ln[7])
+						L = ev(ln[6])
+						C = ev(ln[7])
 						printOut( "L=%f, Q=%f, freq=%f"%(L,Q,frequency))
 						R = Q * 2 * necmath.pi * frequency * L * 1e+6
 						lines[-1]="LD 1 %d %d %d %s %s %s "%(i2, i3, i4, fn(R), fn(L), fn(C))
 					elif ldtype == 7:
-						i2 = int(self.evalToken(ln[2]))
-						i3 = int(self.evalToken(ln[3]))
-						i4 = int(self.evalToken(ln[4]))
-						R = self.evalToken(ln[6])
-						diel = self.evalToken(ln[5])
-						r = tag_radii.tagRadius(i2, "LD")
+						i2 = int(ev(ln[2]))
+						i3 = int(ev(ln[3]))
+						i4 = int(ev(ln[4]))
+						R = ev(ln[6])
+						diel = ev(ln[5])
+						r = ev(self.nec_file_input.tag_data.tagRadius(i2, "LD"))
 						#printOut( "tag=%d, R=%f, r=%f, diel=%f"%(i2,R,r,diel))
 						L = 2e-7 * (diel * R/r)**(1.0/12) * (1 - 1/diel) * necmath.log(R/r)
 						lines[-1]="LD 5 %d %d %d 0 %s "%(i2, i3, i4, fn(L))
 			else:
-				sline = list(map( self.evalToken , ln[1:]))
+				sline = list(map( ev , ln[1:]))
 				sline[0] =int(sline[0])
 				sline[1] =int(sline[1])
-				tag_radii.addWire(sline[0], sline[-1])
-				math_lines.append(sline)
+				if neccard == "GW":
+					math_lines.append(sline)
 				comments.append(comment)
-				if self.autosegment[0] and self.tag_segmentation.autoSegment(li):
-					self.autoSegment(sline)
+				if self.nec_file_input.autosegment[0] and self.nec_file_input.tag_data.autoSegment(li):
+					self.nec_file_input.autoSegment(ln[0], sline)
 				sline = map(fn, sline)
 				lines.append(ln[0]+" "+" ".join(sline))
-		#del self.globals
-		if self.write_js_model:
-			self.writeJSModel(math_lines,comments)
-		if self.options.html:
-			self.html_output.addJSModel(math_lines,comments)
 		if not self.wire_structure.testLineIntersections(math_lines):
 			return []
 		return lines
 
-	def writeJSModel(self, lines, comments):
-		for i in jsModelFromLines(lines, comments):
-			printOut(i)
-
-	def writeNecInput(self, filename, extralines=[], skiptags=[]):
-		lines = self.necInputLines(self.frequency, skiptags)
+	def writeNecInput(self, filename, extralines=[], skipcards=[]):
+		lines = self.necInputLines(self.nec_file_input.frequency, skipcards)
 		if not lines: return 0
 		lines.extend(extralines)
 		file = open(filename, "wt")
 		try: file.write("\n".join(lines)+"\n")
 		finally: file.close()
 		return 1
-
-	def writeParametrized(self, filename, extralines=[], skiptags=[], comments=[]):
-		self.updateGlobalVars()
-		lines=[]
-		for v in self.vars.keys():
-			lno = self.paramlines[v]
-			if v in self.min_max.keys():
-				self.lines[lno] = "SY %s=%.7g ' %g, %g" %(v, self.vars[v], self.min_max[v][0], self.min_max[v][1])
-			else:
-				self.lines[lno] = "SY %s=%.7g" %(v, self.vars[v])
-		has_comments = 0
-		for ln in self.lines:
-			comment_pos = ln.find("'")
-			if comment_pos!=-1:
-				comment = ln[comment_pos:].strip('\n')
-				ln = ln[0:comment_pos].strip(' ')
-			else:
-				comment = ""
-				ln = ln.strip(' ')
-			sl = ln.replace(',',' ').split()
-			if sl and sl[0].strip() == "CE":
-				has_comments=1
-			if not sl or not self.autosegment[0] or sl[0].strip() != "GW" : 
-				lines.append(ln.strip()+comment)
-				continue
-			if sl[0].strip() == "GW":
-				sline = list(map( self.evalToken , sl[1:]))
-				if self.autosegment[0] and sl[2][0]!='+':
-					self.autoSegment(sline)
-					sl[2] = str(sline[1])
-				lines.append(" ".join(sl)+comment)
-
-		#del self.globals
-		lines.extend(extralines)
-		file = open(filename, "wt")
-		try: 
-			if comments:
-				file.write("CM ")
-				file.write("\nCM ".join(comments))
-				file.write("\n")
-				if not has_comments:
-					file.write("CE\n")
-			file.write("\n".join(lines)+"\n")
-		finally: file.close()
 
 	def freqSweepLines(self, nec_input_lines, sweep):
 		lines = list(nec_input_lines)
@@ -572,7 +223,7 @@ class NecFileObject:
 				if not angle_sweep:
 					lines.append("RP 0 1 1 1000 90 %g 0 0"%angles[i])
 				else: 
-					lines.append("RP 0 1 %d 1000 90 %g 0 %g"%(int(360/self.options.angle_step)+1, angles[i], self.options.angle_step))
+					lines.append("RP 0 1 %d 1000 90 %g 0 %g"%(int(360/self.nec_file_input.angle_step)+1, angles[i], self.nec_file_input.angle_step))
 		else:
 			lines.append("FR 0 %d 0 0 %g %g"%(ranges[0][2],ranges[0][0],ranges[0][1]))
 			lines.append("PQ -1")
@@ -593,7 +244,7 @@ class NecFileObject:
 				lines.append(" ".join(sl))
 		agt_freq = sweep.agt_freq
 		lines.append("FR 0 0 0 0 %g 0"%agt_freq)
-		step = self.options.angle_step
+		step = self.nec_file_input.angle_step
 		if step < 5 and self.options.forward:
 			step = 5
 		hcount = int(360/step)+1
@@ -866,63 +517,43 @@ class NecFileObject:
 		return r
 
 
-	def evaluate(self, chart_like=0):
+	def evaluate(self):
 		NOP = NecOutputParser 
 		results = self.runSweeps() #[[174,6,8],[470,6,40]]
 		h={}
 		v={}
 		res = []
-		if not chart_like:
-			printOut("Input file : %s"%self.options.input )
-			printOut("Freq sweeps: %s"%str(self.options.sweeps) )
-			if self.autosegment[0]:
-				printOut("Autosegmentation: %d per %g"%self.autosegment)
-			else:
-				printOut("Autosegmentation: NO")
-			printOut("\n")
-	
-			for r in range(len(results)):
-				nop = NOP(results[r][0], results[r][2], self.options)
-				if self.options.debug > 1:
-					for f in nop.frequencies:
-						printOut(f.horizontal)
-				h.update(nop.horizontalPattern())
-				v.update(nop.verticalPattern())
-				nop.printFreqs(r==0)
-				res = res+nop.getGainSWRChartData()
+		res_lines = []
+		printOut("Input file : %s"%self.options.input )
+		printOut("Freq sweeps: %s"%str(self.options.sweeps) )
+		if self.nec_file_input.autosegment[0]:
+			printOut("Autosegmentation: %d per %g"%self.nec_file_input.autosegment)
 		else:
-			for r in range(len(results)):
-				nop = NOP(results[r][0], results[r][2], self.options)
-				h.update(nop.horizontalPattern())
-				v.update(nop.verticalPattern())
-				res = res+nop.getGainSWRChartData()
-			res.sort()
-			g = self.options.input+"_gain"
-			for i in res: g+=(",%.2f"%i[1][0])
-			s = self.options.input+"_swr"
-			for i in res: s+=(",%.2f"%i[1][1])
-			printOut( g)
-			printOut( s)
+			printOut("Autosegmentation: NO")
+		printOut("\n")
+
+		self.options.angle_step = self.nec_file_input.angle_step
+		for r in range(len(results)):
+			nop = NOP(results[r][0], results[r][2], self.options)
+			if self.options.debug > 1:
+				for f in nop.frequencies:
+					printOut(f.horizontal)
+			h.update(nop.horizontalPattern())
+			v.update(nop.verticalPattern())
+			res_lines = res_lines + nop.printFreqs(r==0)
+			res = res+nop.getGainSWRChartData()
 
 		if self.options.html:
 #			if self.options.horizontal_gain:
-			self.html_output.addHPattern(h)
+			if not self.options.frequency_data:
+				self.html_output.addHPattern(h)
 #			else:
 #				self.html_output.addVPattern(v)
-			self.html_output.addGainChart(self.options.sweeps, res)
-			self.html_output.writeToFile(self.options.html)
-		if self.write_js_model:
-			printOut( "Horizontal:")
-			printOut( sorted(h.keys()))
-			for i in sorted(h.keys()):
-				l = int(len(h[i])/2)+1;
-				printOut( "["+("%.2f,"*l)[0:-1]%tuple(h[i][0:l])+"],")
-
-			printOut( "Vertical:")
-			printOut( sorted(v.keys()))
-			for i in sorted(v.keys()):
-				l = int(len(v[i])/2)+1;
-				printOut( "["+("%.2f,"*l)[0:-1]%tuple(v[i][0:l])+"],")
+			self.html_output.addResults("\n".join(res_lines))
+			self.html_output.addNec(self.nec_file_input.parametrizedLines())
+			if not self.options.frequency_data:
+				self.html_output.addGainChart(self.options.sweeps, res)
+			self.html_output.writeToFile(self.options.input+".html")
 				
 
 
@@ -953,11 +584,13 @@ class OptionParser(optparse.OptionParser):
 		self.add_option("--horizontal-gain", action="store_const", const=1, dest="gain_type", help="calculate horizontal gain [default]")
 		self.add_option("--total-gain", action="store_const", const=2, dest="gain_type", help="calculate total gain")
 		self.add_option("-f", "--frequency_data", default = "{}", help="a map of frequency to (angle, expected_gain) tuple" )
-		self.add_option("--cleanup", default=180, type="int", help="remove output files older than CLEANUP seconds. set to 0 to disable")
-	def parse_args(self):
-		options, args = optparse.OptionParser.parse_args(self)
+		self.add_option("--cleanup", default=180, type="int", help="IGNORED") #remove output files older than CLEANUP seconds. set to 0 to disable
+	def parse_args(self, extra_args=[]):
+		options, args = optparse.OptionParser.parse_args(self, sys.argv[1:]+extra_args)
 		if options.rear_angle<0 or options.rear_angle>270: raise ValueError("Invalid rear angle of %d"%options.rear_angle)
 		options.frequency_data = eval(options.frequency_data)
+		while '' in args:
+			args.remove('')
 		if options.input == "":
 			if len(args):
 				options.input=args[0]
@@ -984,11 +617,11 @@ def optionParser():
 			self.add_option("--param-values-file", default="", help="Read the parameter values from file, generate output.nec and evaluate it instead of the input file. The file should contain two lines: space separated parameter names on the first and space separated values on the second.")
 			self.add_option("--agt-correction", default=1, type="int", help="ignored. agt correction is always applied")
 			self.add_option("-c", "--centers", default=True, help="run sweep on the channel centers",action="store_false", dest="ends")
-			self.add_option("--chart", default=0, action="store_true")
-			self.add_option("--js-model", default=0, action="store_true", help="write jsmodel")
-			self.add_option("--html", default="output.html", help="html output file")
-		def parse_args(self):
-			options, args = OptionParser.parse_args(self)
+			self.add_option("--chart", default=0, action="store_true", help="IGNORED")
+			self.add_option("--js-model", default=0, action="store_true", help="IGNORED")
+			self.add_option("--html", default=1, help="output html file, set to 0 to disable")
+		def parse_args(self, extra_args=[]):
+			options, args = OptionParser.parse_args(self,extra_args)
 			class Calc: pass
 			options.calc = Calc()
 			options.calc.gain=1
@@ -998,29 +631,43 @@ def optionParser():
 			options.quiet=0
 			options.forward = 0
 			options.verbose=0
-			if not options.sweeps:
-				options.sweeps = [(470,6,39)]
-			if not options.ends:
-				for i in range(len(options.sweeps)):
-					if not options.sweeps[i][1]: continue
-					options.sweeps[i] = (options.sweeps[i][0] - options.sweeps[i][1]/2, options.sweeps[i][1], options.sweeps[i][2]+1)
 			return (options, args)
 	return MainOptionParser()
 
 
-def run(options):
-	nf = NecFileObject(options)
-	nf.evaluate(options.chart)
+def run(nec_file_input,options):
+	if not options.sweeps:
+		if nec_file_input.sweeps:
+			options.sweeps = list(nec_file_input.sweeps)
+		else:
+			options.sweeps = [(470,6,39)]
+	if not options.ends:
+		for i in range(len(options.sweeps)):
+			if not options.sweeps[i][1]: continue
+			options.sweeps[i] = (options.sweeps[i][0] - options.sweeps[i][1]/2, options.sweeps[i][1], options.sweeps[i][2]+1)
+
+	nf = NecEvaluator(nec_file_input,options)
+	nf.evaluate()
 
 def main():
 #default values
-	options, args = optionParser().parse_args()
-	run(options)
-	for inp in args:
+	from nec.input import NecInputFile
+	options, inputs = optionParser().parse_args()
+	nec_file_input = NecInputFile(options.input, options.debug)
+	if  "EVAL" in nec_file_input.cmd_options:
+		import shlex
+		options, args = optionParser().parse_args(shlex.split(nec_file_input.cmd_options["EVAL"] ))
+	run(nec_file_input, options)
+	for inp in inputs:
 		if inp[0]!="-":
 			options.input = inp
 			try:
-				run(options)
+				nec_file_input = NecInputFile(options.input, options.debug)
+				if  "EVAL" in nec_file_input.cmd_options:
+					import shlex
+					options, args = optionParser().parse_args(shlex.split(nec_file_input.cmd_options["EVAL"] ))
+				options.input = inp
+				run(nec_file_input, options)
 			except:
 				traceback.print_exc()
 				pass

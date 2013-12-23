@@ -25,7 +25,7 @@ def atan(x) : return degrees(_atan(x))
 def atan2(y,x) : return degrees(_atan2(y,x))
 
 atn = atan
-def sqr(a) : return a*a
+def sqr(a) : return sqrt(a)
 
 def normalizeDegree(ang, start = 0):
 	while ang < start:
