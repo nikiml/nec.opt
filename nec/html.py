@@ -135,7 +135,7 @@ html = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.
 </head>\n\
 \n\
 <body>\n\
-<div id="menu" style="float:left; width:190px; background-color:#E5ECF9; margin-left:10px; margin-top:20px; padding:10px""></div>\n\
+<div id="menu" style="float:left; width:190px; background-color:#E5ECF9; margin-left:10px; margin-top:20px; padding:10px"></div>\n\
 <div style="margin-top:20px; margin-right:10px; margin-left:240px">\n\
 	<div>\n\
 		<ul class="tabs" id="tabs">\n\
