@@ -1,4 +1,7 @@
 setup.py
+nec-post-setup.py
+nec_eval.sh
+nec_opt.sh
 nec/demathutils.py
 nec/differential_evolution.py
 nec/eval.py
@@ -38,3 +41,10 @@ nec/html/js/raphael-min.js
 nec/html/js/sylvester-min.js
 nec/html/js/tabs.js
 nec/html/js/viewer-menu-min.js
+nec/engines/nec2dxs11k.exe
+nec/engines/nec2dxs1K5.exe
+nec/engines/nec2dxs3k0.exe
+nec/engines/nec2dxs500.exe
+nec/engines/nec2dxs5k0.exe
+nec/engines/nec2dxs8k0.exe
+nec/engines/nec2mp-readme.pdf

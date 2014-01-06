@@ -376,7 +376,9 @@ class NecInputFile:
 		
 	def writeSource(self, filename):
 		file = open(filename, "wt")
-		try: file.writelines(self.lines)
+		try: 
+			file.writelines(self.lines)
+			file.write("\n")
 		finally: file.close()
 	
 	def evalToken(self, x):

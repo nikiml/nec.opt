@@ -207,7 +207,8 @@ class NecEvaluator:
 		if not lines: return 0
 		lines.extend(extralines)
 		file = open(filename, "wt")
-		try: file.write("\n".join(lines)+"\n")
+		try: 
+			file.write("\n".join(lines)+"\n")
 		finally: file.close()
 		return 1
 
@@ -271,11 +272,13 @@ class NecEvaluator:
 		fslines = self.freqSweepLines(nec_input_lines,sweep)
 		if not fslines:
 			return ()
-		try: file.write("\n".join(fslines))
+		try: 
+			file.write("\n".join(fslines)+"\n")
 		finally: file.close()
 		if (self.options.agt_correction or get_agt_scores) and (use_agt is None):
 			file = open(agt_input, "wt")
-			try: file.write("\n".join(self.agtLines(nec_input_lines,sweep)))
+			try: 
+				file.write("\n".join(self.agtLines(nec_input_lines,sweep))+"\n")
 			finally: file.close()
 		
 		nec_output = nec_input[0:-3]+"out"
