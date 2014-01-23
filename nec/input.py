@@ -306,6 +306,8 @@ class NecInputFile:
 					self.scale = self.evalToken(self.srclines[-1][3])
 				elif neccard == "RP":
 					self.angle_step = self.evalToken(self.srclines[-1][8])
+					if self.angle_step == 0:
+						self.angle_step = 5
 				elif neccard == "GE":
 					self.tag_data.finalize()
 

@@ -123,21 +123,18 @@ class WireStructure:
 
 	def mirrorStructure(self, lines,comments, tincr, x,y,z):
 		#print "mirroring"
-		l = len(lines)
-		for i in range(l):
-			lines.append(list(lines[i]))
-			comments.append(comments[i])
-			if lines[l+i][0]:
-				lines[l+i][0]=lines[i][0]+tincr
-			if x:
-				lines[l+i][2]=-lines[i][2]
-				lines[l+i][5]=-lines[i][5]
-			if y:
-				lines[l+i][3]=-lines[i][3]
-				lines[l+i][6]=-lines[i][6]
-			if z:
-				lines[l+i][4]=-lines[i][4]
-				lines[l+i][7]=-lines[i][7]
+		mirrors = [x,y,z]
+		for m in range(3):
+			if not mirrors[m]: continue;
+			l = len(lines)
+			for i in range(l):
+				lines.append(list(lines[i]))
+				comments.append(comments[i])
+				if lines[l+i][0]:
+					lines[l+i][0]=lines[i][0]+tincr
+					lines[l+i][2+m]=-lines[i][2+m]
+					lines[l+i][5+m]=-lines[i][5+m]
+			tincr = 2*tincr
 
 	def moveStructure(self, lines, rng, tincr, rx, ry,rz, x,y,z):
 		#print "moving %d lines, from %d to %d, incrementing tags with %d"%(rng[1]-rng[0],rng[0],rng[1],tincr)
