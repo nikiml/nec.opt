@@ -300,7 +300,6 @@ class NecEvaluator:
 		exe_input = nec_input[0:-3]+"cin"
 		agt = 1.0
 		engine = chooseEngine(self.options.engine, segments)
-		printOut( "Segments: %d, Engine: %s\n"%(segments, engine))
 		if use_agt is not None:
 			agt = use_agt
 		elif self.options.agt_correction or get_agt_scores :
