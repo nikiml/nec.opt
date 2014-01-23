@@ -13,6 +13,16 @@ input = "input.nec"
 autosegmentation=10
 ncores=4
 
+def chooseEngine(engine, segs):
+	if engine !="": return engine
+	if segs<500 : return "nec2dxs500"
+	if segs<1500 : return "nec2dxs1k5"
+	if segs<3000 : return "nec2dxs3k0"
+	if segs<5000 : return "nec2dxs5k0"
+	if segs<8000 : return "nec2dxs8k0"
+	if segs<11000 : return "nec2dxs11k"
+	raise RuntimeError("Too many segments - use --engine to specify engine")
+
 class Sweep:
 	def __init__(self, ranges, angles, agt_freq,sweepid):
 		self.ranges = ranges
@@ -105,6 +115,7 @@ class NecEvaluator:
 		comments = self.nec_file_input.comments
 		fn = lambda x:self.formatNumber(x,0)
 		ev = lambda x:self.nec_file_input.evalToken(x)
+		segment_count = 0
 		for li in range(len(varlines)):
 			ln = varlines[li]
 			comment = comments[li]
@@ -191,26 +202,29 @@ class NecEvaluator:
 				sline = list(map( ev , ln[1:]))
 				sline[0] =int(sline[0])
 				sline[1] =int(sline[1])
-				if neccard == "GW":
-					math_lines.append(sline)
 				comments.append(comment)
 				if self.nec_file_input.autosegment[0] and self.nec_file_input.tag_data.autoSegment(li):
 					self.nec_file_input.autoSegment(ln[0], sline)
+				if neccard == "GW":
+					math_lines.append(sline)
+				else:
+					segment_count+=sline[1]
 				sline = map(fn, sline)
 				lines.append(ln[0]+" "+" ".join(sline))
 		if not self.wire_structure.testLineIntersections(math_lines):
 			return []
-		return lines
+		segment_count += sum(list(map(lambda x: x[1], math_lines)))
+		return lines, segment_count
 
 	def writeNecInput(self, filename, extralines=[], skipcards=[]):
-		lines = self.necInputLines(self.nec_file_input.frequency, skipcards)
+		lines, segments = self.necInputLines(self.nec_file_input.frequency, skipcards)
 		if not lines: return 0
 		lines.extend(extralines)
 		file = open(filename, "wt")
 		try: 
 			file.write("\n".join(lines)+"\n")
 		finally: file.close()
-		return 1
+		return segments
 
 	def freqSweepLines(self, nec_input_lines, sweep):
 		lines = list(nec_input_lines)
@@ -267,6 +281,7 @@ class NecEvaluator:
 			
 		nec_input = os.path.join(".",self.options.output,"nec2_"+id+".inp")
 		agt_input = nec_input[0:-3]+"agt"
+		nec_input_lines, segments = nec_input_lines
 
 		file = open(nec_input, "wt")
 		fslines = self.freqSweepLines(nec_input_lines,sweep)
@@ -286,9 +301,10 @@ class NecEvaluator:
 		agt = 1.0
 		if use_agt is not None:
 			agt = use_agt
+		engine = chooseEngine(self.options.engine, segments)
 		elif self.options.agt_correction or get_agt_scores :
 			if self.options.engine_takes_cmd_args:
-				popen = sp.Popen([self.options.engine, agt_input, nec_output] )
+				popen = sp.Popen([engine, agt_input, nec_output] )
 				popen.wait()
 			else:
 				try:
@@ -299,7 +315,7 @@ class NecEvaluator:
 					f.write("\n")
 					f.close()
 					f = open(exe_input)
-					popen = sp.Popen(self.options.engine, stdin=f, stdout=open(os.devnull, "w"))
+					popen = sp.Popen(engine, stdin=f, stdout=open(os.devnull, "w"))
 					popen.wait()
 				finally:
 					f.close()
@@ -307,7 +323,7 @@ class NecEvaluator:
 			if get_agt_scores:
 				return (nec_output,agt)
 		if self.options.engine_takes_cmd_args:
-			popen = sp.Popen([self.options.engine, nec_input, nec_output] )
+			popen = sp.Popen([engine, nec_input, nec_output] )
 			popen.wait()
 		else:
 			try:
@@ -318,7 +334,7 @@ class NecEvaluator:
 				f.write("\n")
 				f.close()
 				f = open(exe_input)
-				popen = sp.Popen(self.options.engine, stdin=f, stdout=open(os.devnull, "w"))
+				popen = sp.Popen(engine, stdin=f, stdout=open(os.devnull, "w"))
 				popen.wait()
 			finally:
 				f.close()
@@ -574,7 +590,7 @@ class OptionParser(optparse.OptionParser):
 		self.add_option("-v", "--vhf-lo", action="append_const", dest="sweeps", const="(54,6,6)", help="adds a vhf-lo (ch. 1-6) sweep")
 		self.add_option("-n", "--num-cores", type="int", default=ncores, help="number of cores to be used, default=%default")
 		self.add_option("-a", "--auto-segmentation", metavar="NUM_SEGMENTS", type="int", default=autosegmentation, help="autosegmentation level - set to 0 to turn autosegmentation off, default=%default")
-		self.add_option("-e", "--engine", metavar="NEC_ENGINE", default="nec2dxs1k5", help="nec engine file name, default=%default")
+		self.add_option("-e", "--engine", metavar="NEC_ENGINE", default="", help="nec engine file name, default=%default")
 		self.add_option("--engine-takes-cmd-args", default="auto", type="string", help="the nec engine takes command args, default=auto (which means no on windows yes otherwise). Other options are 'yes' or 'no'.")
 		self.add_option("-d", "--min-wire-distance", default=.005, type="float", help="minimum surface-to-surface distance allowed between non-connecting wires, default=%default")
 		self.add_option("--debug", default=0, type="int", help="turn on some loging")
