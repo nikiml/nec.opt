@@ -229,8 +229,7 @@
         dir = dir == null ? 2 : dir > 3 ? 3 : dir;
         size = size || 5;
         text = text || "$9.99";
-        var res = this.set(),
-            d = 3;
+        var res = this.set();
         res.push(this.path().attr({fill: "#000", stroke: "#000"}));
         res.push(this.text(x, y, text).attr(this.g.txtattr).attr({fill: "#fff", "font-family": "Helvetica, Arial"}));
         res.update = function (X, Y, withAnimation) {
@@ -358,6 +357,9 @@
             r = ~~(d),
             R = r,
             i = 0;
+        if (d == r) {
+            return {from: f, to: t, power: 0};
+        }
         if (r) {
             while (R) {
                 i--;
@@ -389,8 +391,8 @@
             t = ends.to,
             i = ends.power,
             j = 0,
-            text = this.set();
-        d = (t - f) / steps;
+            text = this.set(),
+			d = (t - f) / steps;
         var label = f,
             rnd = i > 0 ? i : 0;
             dx = length / steps;

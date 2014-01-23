@@ -272,8 +272,8 @@ class NecInputFile:
 				comment = ""
 				ln = ln.strip()
 			neccard = ln[0:2].upper()
-			if neccard == "CM" and ln[0:5].upper()=="CMD--":
-				ln = ln[5:].split(' ')
+			if neccard == "CM" and (ln[0:5].upper()=="CMD--" or ln[0:6].upper()=="CM D--"):
+				ln = (ln[5:] if ln[0:5].upper()=="CMD--" else ln[6:]).split(' ')
 				if len (ln) > 1:
 					if ln[0] in self.cmd_options:
 						self.cmd_options[ln[0]] += " "+" ".join(ln[1:])
@@ -354,7 +354,7 @@ class NecInputFile:
 			line[1]=segs
 
 			for seg_ref in self.segment_references[tag]:
-				self.srclines[seg_ref.srcline_no][seg_ref.token_no] = str(seg_ref.newSegNo(segs))
+				self.srclines[seg_ref.srcline_no][seg_ref.token_no] = str(int(seg_ref.newSegNo(segs)))
 				self.lines[seg_ref.line_no] = " ".join(self.srclines[seg_ref.srcline_no])
 		else:
 			if not segs % 2:

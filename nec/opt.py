@@ -547,7 +547,7 @@ def optionParser():
 		def __init__(self):
 			ne.OptionParser.__init__(self)
 			self.add_option("--noagt-correction", default=False, action="store_true")
-			self.add_option("-l", "--log-file", default="opt.log",metavar="FILE", help="log file. The default is %default.")
+			self.add_option("-l", "--log-file", default="",metavar="FILE", help="log file. The default is your_input_file.opt_log.")
 			self.add_option("-S", "--seed-with-input", default=False, action="store_true", help="use the input file as one of the population members (creates bias towards the input file if it has a good score)")
 			self.add_option("-t", "--target-level", dest="target_levels", default=[], metavar="TARGET_LEVEL", action="append", type="string", help="appends target level(s) for a sweep, the number of target levels must match the number of sweeps and they are paired positionally. Examples1: -s (174,6,8) -t (8,9) means target levels linearly increasing from 8 to 9 for the frequencies from 174 to 216. Example2: -s (174,6,8) -t (8, 8.5, 9.5, 9) means target levels of 8 for 174, 9 for 216 and gradually increasing levels from 8.5 to 9.5 for the range 180 to 210")
 			self.add_option("-M", "--max-iter", default=10000, type="int", help="The default is %default. The script can be interrupted with Ctrl+C at any time and it will output its current best result as 'output.nec'")
@@ -679,6 +679,8 @@ def main():
 		options, args = optionParser().parse_args(shlex.split(nec_file_input.cmd_options["OPT"] ) )
 	options.agt_correction = not options.noagt_correction
 	options.angle_step = nec_file_input.angle_step
+	if options.log_file=="":
+		options.log_file = options.input+".opt_log"
 	if options.profile:
 		import cProfile
 		cProfile.runctx('optimize(nec_file_input, options)',globals(), locals())

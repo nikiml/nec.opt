@@ -5,7 +5,7 @@
  * Licensed under the MIT (http://www.opensource.org/licenses/mit-license.php) license.
  */
 Raphael.fn.g.grid = function (x, y, w, h, wv, hv) {
-    var path = [];//"M", Math.round(x) + .5, Math.round(y) + .5, "L", Math.round(x + w) + .5, Math.round(y) + .5, Math.round(x + w) + .5, Math.round(y + h) + .5, Math.round(x) + .5, Math.round(y + h) + .5, Math.round(x) + .5, Math.round(y) + .5],
+    var path = [],//"M", Math.round(x) + .5, Math.round(y) + .5, "L", Math.round(x + w) + .5, Math.round(y) + .5, Math.round(x + w) + .5, Math.round(y + h) + .5, Math.round(x) + .5, Math.round(y + h) + .5, Math.round(x) + .5, Math.round(y) + .5],
         rowHeight = h / hv,
         columnWidth = w / wv;
     for (var i = 1; i < hv; i++) {
@@ -90,10 +90,9 @@ Raphael.fn.g.linechart = function(x, y, width, height, valuesx, valuesy, opts) {
         }
     }
     var allx = Array.prototype.concat.apply([], valuesx),
-        ally = Array.prototype.concat.apply([], valuesy),
-        xdim = this.g.snapEnds(Math.min.apply(Math, allx), Math.max.apply(Math, allx), valuesx[0].length - 1),
-        minx = xdim.from,
-        maxx = xdim.to,
+        ally = Array.prototype.concat.apply([], valuesy), 
+        minx = Math.min.apply(Math, allx), 
+        maxx = Math.max.apply(Math, allx), 
         ydim = this.g.snapEnds(Math.min.apply(Math, ally), Math.max.apply(Math, ally), valuesy[0].length - 1),
         miny = ydim.from,
         maxy = ydim.to;
@@ -134,9 +133,8 @@ Raphael.fn.g.linechart = function(x, y, width, height, valuesx, valuesy, opts) {
             }));
         }
         var sym = this.raphael.is(symbol, "array") ? symbol[i] : symbol,
-            symset = this.set();
+            symset = this.set(), skip = 0;
         path = [];
-        skip = 0;
         for (var j = 0, jj = valuesy[i].length; j < jj; j++) {
             if (valuesy[i][j] < miny) {
                 skip = 1;
