@@ -1,5 +1,6 @@
 from nec.demathutils import mean_value, min_value
 from nec.print_out import printOut
+from datetime import datetime
 
 def floatOrNone(s):
 	if s== "None":return 0
@@ -27,7 +28,7 @@ def parseLogFile(filename, full, number_of_lines, population_number):
 			break
 	if i==-1:
 		return ()
-	np = j/2
+	np = int(j / 2)
 	
 	scores = []
 	population = []
@@ -76,8 +77,8 @@ if __name__ == "__main__":
 	options.add_option("-n", "--number-of-lines", default=0,type="int")
 	options.add_option("-N", "--output-line-numbers", default=False, action="store_true")
 	options.add_option("-c", "--generation-count", default=0, type="int")
-	options.add_option("-r", "--restart-file", default=1, type="int")
-	options.add_option("-s", "--stats", default=1, type="int")
+	options.add_option("-r", "--restart-file",  default=False, action="store_true")
+	options.add_option("-s", "--stats", default=False, action="store_true")
 	opts, args = options.parse_args()
 	p = parseLogFile(opts.log_file, opts.full, opts.number_of_lines,opts.generation_count)
 	if opts.progress_only:exit(0)
@@ -85,36 +86,34 @@ if __name__ == "__main__":
 		printOut( "Failed to extract population")
 	else:
 		vars,scores, population = p
-		if opts.output_line_numbers:
-			printOut( ("Num    "+(len(vars)+1)*"%9s ")%tuple(["Score"]+vars) )
-			for i in range(len(scores)):
-				printOut( ("[%03d]. "+ (len(vars)+1)*"%3.5f ")%tuple([i]+[scores[i]]+population[i]) )
-		else:
-			printOut( ((len(vars)+1)*"%9s ")%tuple(["Score"]+vars) )
-			for i in range(len(scores)):
-				printOut( ( (len(vars)+1)*"%3.5f ")%tuple([scores[i]]+population[i]) )
+		if not opts.restart_file:
+			if opts.output_line_numbers:
+				printOut( ("Num    "+(len(vars)+1)*"%9s ")%tuple(["Score"]+vars) )
+				for i in range(len(scores)):
+					printOut( ("[%03d]. "+ (len(vars)+1)*"%3.5f ")%tuple([i]+[scores[i]]+population[i]) )
+			else:
+				printOut( ((len(vars)+1)*"%9s ")%tuple(["Score"]+vars) )
+				for i in range(len(scores)):
+					printOut( ( (len(vars)+1)*"%3.5f ")%tuple([scores[i]]+population[i]) )
 		if opts.restart_file:
 			filename = datetime.now().strftime("restart.%y%m%d.%H%M%S.log")
 			f = open(filename,"wt")
-			f.write("Score\t"+"\t".join(self.opt_vars)+"\n")
+			f.write("Score\t"+"\t".join(vars)+"\n")
 			for i in range(len(population)):
 				f.write( ( (len(vars)+1)*"%3.5f "+"\n")%tuple([scores[i]]+population[i]))
 			f.close()
-		
+		import pdb
 		if opts.stats:
 			stats = {}
-			for i in len(vars):
-				vals = map( lambda x: x[i], population)
-				stats[vars[i]] = [min(vals), max(vals), sum(vals)/len(vals), sum ( map(lambda x: x*x, vals) )/len(vals)]
+			for i in range(len(vars)):
+				vals = list(map( lambda x: x[i], population))
+				stats[vars[i]] = [min(vals), max(vals), sum(vals)/len(vals), sum ( list(map(lambda x: x*x, vals) ) )/len(vals)]
 
-			stats["Score"] = [min(scores), max(scores), sum(scores/len(scores), sum ( map(lambda x: x*x, scores) )/len(scores)]
-				
-			printOut( ("Stat    "+(len(vars)+1)*"%9s ")%tuple(["Score"]+vars) )
-			printOut( ("Min     "+(len(vars)+1)*"%3.5f ")%tuple( map(lambda x: stats[x][0], ["Score"]+vars) ) )
-			printOut( ("Max     "+(len(vars)+1)*"%3.5f ")%tuple( map(lambda x: stats[x][1], ["Score"]+vars) ) )
-			printOut( ("Average "+(len(vars)+1)*"%3.5f ")%tuple( map(lambda x: stats[x][1], ["Score"]+vars) ) )
-			printOut( ("StdDev  "+(len(vars)+1)*"%3.5f ")%tuple( map(lambda x: stats[x][1], ["Score"]+vars) ) )
-		
+			formatStr = lambda x: x + " "*max(0,12-len(x))
+			formatNum = lambda x:  "%3.5f"%x 
+			
+			printOut(''.join(map(formatStr,["","Min", "Max", "Average", "StdDev"])))
+			printOut(''.join(map(formatStr,["Score"]+ list(map(formatNum, [min(scores), max(scores), sum(scores)/len(scores), sum ( list( map(lambda x: x*x, scores) ) )/len(scores)] ) ) )))
+			for i in range(len(vars)):
+				printOut(''.join(map(formatStr,[vars[i]]+list(map(formatNum,stats[vars[i]])))) )
 
-
-	
