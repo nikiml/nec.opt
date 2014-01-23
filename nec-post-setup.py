@@ -28,7 +28,7 @@ def createBatFiles():
 	opt.write("@echo off\n")
 	opt.write("%~d1\n")
 	opt.write("cd %~p1\n")
-	opt.write("set PATH=%PATH%;"+sys.prefix)
+	opt.write("set PATH=%PATH%;"+sys.prefix+"\n")
 	opt.write("python -m nec.extract_last_population -n-1 -s -r -l %1 \n")
 	opt.write("pause\n")
 	opt.close()
