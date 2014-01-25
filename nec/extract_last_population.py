@@ -102,18 +102,20 @@ if __name__ == "__main__":
 			for i in range(len(population)):
 				f.write( ( (len(vars)+1)*"%3.5f "+"\n")%tuple([scores[i]]+population[i]))
 			f.close()
-		import pdb
+		import math
 		if opts.stats:
 			stats = {}
 			for i in range(len(vars)):
 				vals = list(map( lambda x: x[i], population))
-				stats[vars[i]] = [min(vals), max(vals), sum(vals)/len(vals), sum ( list(map(lambda x: x*x, vals) ) )/len(vals)]
+				ave = sum(vals)/len(vals)
+				stats[vars[i]] = [min(vals), max(vals), ave, math.sqrt(sum ( list(map(lambda x: x*x, vals) ) )/len(vals) - ave*ave)]
 
 			formatStr = lambda x: x + " "*max(0,12-len(x))
 			formatNum = lambda x:  "%3.5f"%x 
 			
 			printOut(''.join(map(formatStr,["","Min", "Max", "Average", "StdDev"])))
-			printOut(''.join(map(formatStr,["Score"]+ list(map(formatNum, [min(scores), max(scores), sum(scores)/len(scores), sum ( list( map(lambda x: x*x, scores) ) )/len(scores)] ) ) )))
+			ave = sum(scores)/len(scores)
+			printOut(''.join(map(formatStr,["Score"]+ list(map(formatNum, [min(scores), max(scores), sum(scores)/len(scores), math.sqrt(sum ( list( map(lambda x: x*x, scores) ) )/len(scores)-ave*ave)] ) ) ))) 
 			for i in range(len(vars)):
 				printOut(''.join(map(formatStr,[vars[i]]+list(map(formatNum,stats[vars[i]])))) )
 

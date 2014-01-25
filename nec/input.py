@@ -5,6 +5,12 @@ import sys, traceback, os, pprint, functools
 from nec import necmath
 from nec.print_out import printOut
 
+nec_cards =["SY","CM","CE","GA","GE","GF","GH","GM","GR","GS","GW","GX","SP","SM","CP","EK","EN","EX","FR","GD","GN","KH","LD","NE","NH","NT","NX","PQ","PT","RP","TL","WG","XQ"]
+
+class InputError(RuntimeError):
+	def __init__(self, msg):
+		RuntimeError.__init__(self, msg)
+		
 class NecInputFile:
 	def __init__(self, input, debug=0):
 		self.cmd_options = {}
@@ -30,7 +36,7 @@ class NecInputFile:
 		file = open(sourcefile, "rt")
 		try: self.lines = file.readlines()
 		finally: file.close()
-		if not self.lines: raise RuntimeError("Empty input file")
+		if not self.lines: raise InputError("Empty input file")
 		self.parse()
 	
 	def evalVarLine(self, line, g=None, l=None):
@@ -99,9 +105,9 @@ class NecInputFile:
 		#do we have uniques segmentation for a tag?, needed for EX, NT or TL cards which reference wire by tag and segment no
 		def tagSegments(self, tag, ref_card):
 			if tag not in self.tag_data.keys():
-				raise RuntimeError("Invalid tag reference %d in %s card" %(tag,ref_card))
+				raise InputError("Invalid tag reference %d in %s card" %(tag,ref_card))
 			if len(self.tag_data[tag].nsegs)>1:
-				raise RuntimeError("Ambiguous tag reference %d in %s card" %(tag,ref_card))
+				raise InputError("Ambiguous tag reference %d in %s card" %(tag,ref_card))
 			return self.tag_data[tag].nsegs[0]
 
 		def tagRadius(self, tag, ref_card): #for LD 7
@@ -109,7 +115,7 @@ class NecInputFile:
 				for k in self.tag_data.keys():
 					return self.tag_data[k].rad[0]
 			if tag not in self.tag_data.keys():
-				raise RuntimeError("Invalid tag reference %d in %s card" %(tag,ref_card))
+				raise InputError("Invalid tag reference %d in %s card" %(tag,ref_card))
 			return self.tag_data[tag].rad[0]
 
 		def autoSegment(self, srclineno):
@@ -163,7 +169,7 @@ class NecInputFile:
 			return round( (self.seg_no-.5)/self.seg_count*seg_count +.5)
 
 	def checkNonZeroTag(self, tag, card):
-		if not tag: raise RuntimeError("Tag 0 is not supported in %s card"%card)
+		if not tag: raise InputError("Tag 0 is not supported in %s card"%card)
 
 
 	def parseSYLine(self, ln, comment, lineno):
@@ -197,10 +203,10 @@ class NecInputFile:
 			if self.debug: sys.stderr.write("debug: \tAdded dependent parameter \"%s\"\n"%ln[3:].strip())
 			self.dependent_vars.append(ln[3:].strip())
 			try: self.evalVarLine(self.dependent_vars[-1],necmath.__dict__, self.globals)
-			except:
-				traceback.print_exc()
-				sys.stderr.write( "failed parsing '%s'\n"%(d))
-				raise
+			except Exception  as e:
+#				traceback.print_exc()
+#				sys.stderr.write( "failed parsing '%s'\n"%(d))
+				raise InputError("Failed to evaluate variable in line : \n"+ln+"\nReason: "+ str(e))
 	def parseEXLine(self, line, srclineno, lineno):
 		type = int(line[1])
 		if type == 0 or type == 6 :
@@ -271,7 +277,10 @@ class NecInputFile:
 			else:
 				comment = ""
 				ln = ln.strip()
+			if ln == "": continue
 			neccard = ln[0:2].upper()
+			if neccard not in nec_cards:
+				raise InputError("Unknown nec card: "+neccard)
 			if neccard == "CM" and (ln[0:5].upper()=="CMD--" or ln[0:6].upper()=="CM D--"):
 				ln = (ln[5:] if ln[0:5].upper()=="CMD--" else ln[6:]).split(' ')
 				if len (ln) > 1:
@@ -340,7 +349,7 @@ class NecInputFile:
 			even = functools.reduce( requiresEven, self.segment_references[tag], self.segment_references[tag][0])
 			odd = functools.reduce( requiresOdd, self.segment_references[tag], self.segment_references[tag][0])
 			if even and odd:
-				raise RuntimeError("both even and odd segmentation is required for tag %d"%tag)
+				raise InputError("Both even and odd segmentation is required for tag %d"%tag)
 			if (even and segs % 2) or (odd and not segs % 2) :
 				if nsegs < segs and segs > 1:
 					segs-=1
@@ -391,10 +400,8 @@ class NecInputFile:
 		self.globals.update(self.vars)
 		for d in self.dependent_vars:
 			try: self.evalVarLine(d,necmath.__dict__, self.globals)
-			except:
-				traceback.print_exc()
-				sys.stderr.write( "failed parsing '%s'\n"%(d))
-				raise
+			except Exception as e:
+				raise InputError("Failed to evaluate variable:  '%s'\n"%(d) + "\nReason: "+str(e))
 		
 	def parametrizedLines(self, extralines=[], skiptags=[], comments=[]):
 		self.updateGlobalVars()
@@ -448,7 +455,7 @@ class NecInputFile:
 
 	def updateVars(self, names, vals):
 		for i in range(len(names)):
-			if names[i] not in self.vars: raise RuntimeError("invalid Parameter name")
+			if names[i] not in self.vars: raise InputError("invalid Parameter name: "+names[i])
 			self.vars[names[i]] = vals[i]
 		
 		

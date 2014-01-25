@@ -7,6 +7,7 @@ from nec.wire_structure import WireStructure
 from nec.print_out import printOut
 from nec.output_parser import FrequencyData, NecOutputParser
 from nec.html import HtmlOutput
+from nec.input import NecInputFile, InputError
 
 output = "output"
 input = "input.nec"
@@ -72,7 +73,7 @@ class NecEvaluator:
 			f.close()
 		except:
 			raise
-		if len(lines)<2: raise  RuntimeError("invalid Parametes files")
+		if len(lines)<2: raise  InputError("invalid Parametes files")
 		vars = lines[0].split()
 		del lines[0]
 		lines[0] = list(map(float, lines[0].split()))
@@ -120,97 +121,101 @@ class NecEvaluator:
 			ln = varlines[li]
 			comment = comments[li]
 			if not ln: continue
-			neccard = ln[0].strip().upper()
-			if neccard not in  ["GW","GA","GH"]:
-				if neccard  in skipcards:
-					assert neccard not in ["GX","GM","GR","GR","SC","GC","NT","TL","LD"]
-					continue
-				try:
+			try:
+				neccard = ln[0].strip().upper()
+				if neccard not in  ["GW","GA","GH"]:
+					if neccard  in skipcards:
+						assert neccard not in ["GX","GM","GR","GR","SC","GC","NT","TL","LD"]
+						continue
+					try:
+						sline = list(map( ev , ln[1:]))
+						sline = map(fn, sline)
+						lines.append(ln[0]+" "+" ".join(sline))
+					except:
+						lines.append(" ".join(ln))
+
+					if neccard == "GX":
+						i1 = int(ev(ln[1]))
+						self.wire_structure.mirrorStructure(math_lines,comments, i1, int(ln[2][0]), int(ln[2][1]), int(ln[2][2]))
+						lines[-1]="GX %d %s"%(i1,ln[2])
+					elif neccard == "GM":
+						if len(ln) < 10:
+							ln=ln+(10-len(ln))*[".0"]
+						i1 = int(ev(ln[1]))
+						i2 = int(ev(ln[2]))
+						f3 = ev(ln[3])
+						f4 = ev(ln[4])
+						f5 = ev(ln[5])
+						f6 = ev(ln[6])
+						f7 = ev(ln[7])
+						f8 = ev(ln[8])
+						i9 = int(ev(ln[9]))
+						self.wire_structure.moveCopyStructure(math_lines,comments, i1, i2, f3, f4, f5, f6, f7, f8, i9)
+						lines[-1]="GM %d %d %f %f %f %f %f %f %d"%(i1, i2, f3, f4, f5, f6, f7, f8, i9)
+					elif neccard == "GR":
+						i1 = int(ev(ln[1]))
+						i2 = int(ev(ln[2]))
+						self.wire_structure.rotateStructure(math_lines,comments, i1, i2)
+						lines[-1]="GR %d %d"%(i1, i2)
+					elif neccard == "SP":
+						i1 = int(ln[1])
+						i2 = int(ev(ln[2]))
+						lines[-1]="SP %d %d "%(i1, i2)+" ".join(list(map( fn, map( ev , ln[3:]))))
+					elif neccard == "SM":
+						i1 = int(ev(ln[1]))
+						i2 = int(ev(ln[2]))
+						lines[-1]="SM %d %d "%(i1, i2)+" ".join(list(map( fn, map( ev , ln[3:]))))
+					elif neccard == "SC" or neccard == "GC":
+						i1 = int(ln[1])
+						i2 = int(ln[2])
+						lines[-1]="%s %d %d "%(neccard, i1, i2)+" ".join(list(map( fn, map( ev , ln[3:]))))
+					elif neccard == "NT" or neccard == "TL" :
+						i1 = int(ln[1])
+						i2 = int(ln[2])
+						i3 = int(ln[3])
+						i4 = int(ln[4])
+						lines[-1]="%s %d %d %d %d "%(neccard, i1, i2, i3, i4)+" ".join(list(map( fn, map( ev , ln[5:]))))
+					elif neccard == "LD":
+						ldtype = int(ln[1].strip())
+						if ldtype > 7:
+							raise InputError("Loads (LD) of type > 7 are not know to this script")
+						elif ldtype == 6:
+							i2 = int(ev(ln[2]))
+							i3 = int(ev(ln[3]))
+							i4 = int(ev(ln[4]))
+							Q = ev(ln[5])
+							if not Q: Q = 100
+							L = ev(ln[6])
+							C = ev(ln[7])
+							#printOut( "L=%f, Q=%f, freq=%f"%(L,Q,frequency))
+							R = Q * 2 * necmath.pi * frequency * L * 1e+6
+							lines[-1]="LD 1 %d %d %d %s %s %s "%(i2, i3, i4, fn(R), fn(L), fn(C))
+						elif ldtype == 7:
+							i2 = int(ev(ln[2]))
+							i3 = int(ev(ln[3]))
+							i4 = int(ev(ln[4]))
+							R = ev(ln[6])
+							diel = ev(ln[5])
+							r = ev(self.nec_file_input.tag_data.tagRadius(i2, "LD"))
+							#printOut( "tag=%d, R=%f, r=%f, diel=%f"%(i2,R,r,diel))
+							L = 2e-7 * (diel * R/r)**(1.0/12) * (1 - 1/diel) * necmath.log(R/r)
+							lines[-1]="LD 5 %d %d %d 0 %s "%(i2, i3, i4, fn(L))
+				else:
 					sline = list(map( ev , ln[1:]))
+					sline[0] =int(sline[0])
+					sline[1] =int(sline[1])
+					comments.append(comment)
+					if self.nec_file_input.autosegment[0] and self.nec_file_input.tag_data.autoSegment(li):
+						self.nec_file_input.autoSegment(ln[0], sline)
+					if neccard == "GW":
+						math_lines.append(sline)
+					else:
+						segment_count+=sline[1]
 					sline = map(fn, sline)
 					lines.append(ln[0]+" "+" ".join(sline))
-				except:
-					lines.append(" ".join(ln))
-
-				if neccard == "GX":
-					i1 = int(ev(ln[1]))
-					self.wire_structure.mirrorStructure(math_lines,comments, i1, int(ln[2][0]), int(ln[2][1]), int(ln[2][2]))
-					lines[-1]="GX %d %s"%(i1,ln[2])
-				elif neccard == "GM":
-					if len(ln) < 10:
-						ln=ln+(10-len(ln))*[".0"]
-					i1 = int(ev(ln[1]))
-					i2 = int(ev(ln[2]))
-					f3 = ev(ln[3])
-					f4 = ev(ln[4])
-					f5 = ev(ln[5])
-					f6 = ev(ln[6])
-					f7 = ev(ln[7])
-					f8 = ev(ln[8])
-					i9 = int(ev(ln[9]))
-					self.wire_structure.moveCopyStructure(math_lines,comments, i1, i2, f3, f4, f5, f6, f7, f8, i9)
-					lines[-1]="GM %d %d %f %f %f %f %f %f %d"%(i1, i2, f3, f4, f5, f6, f7, f8, i9)
-				elif neccard == "GR":
-					i1 = int(ev(ln[1]))
-					i2 = int(ev(ln[2]))
-					self.wire_structure.rotateStructure(math_lines,comments, i1, i2)
-					lines[-1]="GR %d %d"%(i1, i2)
-				elif neccard == "SP":
-					i1 = int(ln[1])
-					i2 = int(ev(ln[2]))
-					lines[-1]="SP %d %d "%(i1, i2)+" ".join(list(map( fn, map( ev , ln[3:]))))
-				elif neccard == "SM":
-					i1 = int(ev(ln[1]))
-					i2 = int(ev(ln[2]))
-					lines[-1]="SM %d %d "%(i1, i2)+" ".join(list(map( fn, map( ev , ln[3:]))))
-				elif neccard == "SC" or neccard == "GC":
-					i1 = int(ln[1])
-					i2 = int(ln[2])
-					lines[-1]="%s %d %d "%(neccard, i1, i2)+" ".join(list(map( fn, map( ev , ln[3:]))))
-				elif neccard == "NT" or neccard == "TL" :
-					i1 = int(ln[1])
-					i2 = int(ln[2])
-					i3 = int(ln[3])
-					i4 = int(ln[4])
-					lines[-1]="%s %d %d %d %d "%(neccard, i1, i2, i3, i4)+" ".join(list(map( fn, map( ev , ln[5:]))))
-				elif neccard == "LD":
-					ldtype = int(ln[1].strip())
-					if ldtype > 7:
-						raise RuntimeError("Loads (LD) of type > 7 are not know to this script")
-					elif ldtype == 6:
-						i2 = int(ev(ln[2]))
-						i3 = int(ev(ln[3]))
-						i4 = int(ev(ln[4]))
-						Q = ev(ln[5])
-						if not Q: Q = 100
-						L = ev(ln[6])
-						C = ev(ln[7])
-						printOut( "L=%f, Q=%f, freq=%f"%(L,Q,frequency))
-						R = Q * 2 * necmath.pi * frequency * L * 1e+6
-						lines[-1]="LD 1 %d %d %d %s %s %s "%(i2, i3, i4, fn(R), fn(L), fn(C))
-					elif ldtype == 7:
-						i2 = int(ev(ln[2]))
-						i3 = int(ev(ln[3]))
-						i4 = int(ev(ln[4]))
-						R = ev(ln[6])
-						diel = ev(ln[5])
-						r = ev(self.nec_file_input.tag_data.tagRadius(i2, "LD"))
-						#printOut( "tag=%d, R=%f, r=%f, diel=%f"%(i2,R,r,diel))
-						L = 2e-7 * (diel * R/r)**(1.0/12) * (1 - 1/diel) * necmath.log(R/r)
-						lines[-1]="LD 5 %d %d %d 0 %s "%(i2, i3, i4, fn(L))
-			else:
-				sline = list(map( ev , ln[1:]))
-				sline[0] =int(sline[0])
-				sline[1] =int(sline[1])
-				comments.append(comment)
-				if self.nec_file_input.autosegment[0] and self.nec_file_input.tag_data.autoSegment(li):
-					self.nec_file_input.autoSegment(ln[0], sline)
-				if neccard == "GW":
-					math_lines.append(sline)
-				else:
-					segment_count+=sline[1]
-				sline = map(fn, sline)
-				lines.append(ln[0]+" "+" ".join(sline))
+			except Exception as e:
+				raise InputError("Failed to generate engine input. Reason:\n"+str(e)+"\nAround line:\n"+" ".join(ln))
+			
 		if not self.wire_structure.testLineIntersections(math_lines):
 			return []
 		segment_count += sum(list(map(lambda x: x[1], math_lines)))
@@ -501,6 +506,8 @@ class NecEvaluator:
 			sweep = self.sweeps[i]
 			try:
 				nec_input_lines = self.necInputLines(sweep.midFrequency())
+			except InputError:
+				raise
 			except:
 				if not self.options.quiet: traceback.print_exc()
 				return
@@ -512,6 +519,8 @@ class NecEvaluator:
 		sweep = self.sweeps[-1]
 		try:
 			nec_input_lines = self.necInputLines(sweep.midFrequency())
+		except InputError:
+			raise
 		except:
 			if not self.options.quiet: traceback.print_exc()
 			return
@@ -606,7 +615,7 @@ class OptionParser(optparse.OptionParser):
 		self.add_option("--cleanup", default=180, type="int", help="IGNORED") #remove output files older than CLEANUP seconds. set to 0 to disable
 	def parse_args(self, extra_args=[]):
 		options, args = optparse.OptionParser.parse_args(self, sys.argv[1:]+extra_args)
-		if options.rear_angle<0 or options.rear_angle>270: raise ValueError("Invalid rear angle of %d"%options.rear_angle)
+		if options.rear_angle<0 or options.rear_angle>270: raise InputError("Invalid rear angle of %d"%options.rear_angle)
 		options.frequency_data = eval(options.frequency_data)
 		while '' in args:
 			args.remove('')
@@ -670,13 +679,16 @@ def run(nec_file_input,options):
 
 def main():
 #default values
-	from nec.input import NecInputFile
-	options, inputs = optionParser().parse_args()
-	nec_file_input = NecInputFile(options.input, options.debug)
-	if  "EVAL" in nec_file_input.cmd_options:
-		import shlex
-		options, args = optionParser().parse_args(shlex.split(nec_file_input.cmd_options["EVAL"] ))
-	run(nec_file_input, options)
+	try:
+		options, inputs = optionParser().parse_args()
+		nec_file_input = NecInputFile(options.input, options.debug)
+		if  "EVAL" in nec_file_input.cmd_options:
+			import shlex
+			options, args = optionParser().parse_args(shlex.split(nec_file_input.cmd_options["EVAL"] ))
+		run(nec_file_input, options)
+	except InputError as e:
+		printOut(e)
+		return
 	for inp in inputs:
 		if inp[0]!="-":
 			options.input = inp
@@ -694,4 +706,4 @@ def main():
 
 
 if __name__ == "__main__":
-	main()
+		main()

@@ -7,6 +7,7 @@ import os, math,sys,traceback,time,random
 from nec import eval as ne
 from nec.print_out import printOut
 from datetime import datetime
+from nec.input import NecInputFile, InputError
 
 class NecFileEvaluator:
 
@@ -26,8 +27,11 @@ class NecFileEvaluator:
 		del lines[0:start]
 		vars = lines[0].split()
 		del lines[0]
-		for i in range(len(lines)):
-			lines[i] =list( map(float, lines[i].split()))
+		try:
+			for i in range(len(lines)):
+				lines[i] =list( map(float, lines[i].split()))
+		except Exception as e:
+			raise InputError("\nFailed to parse initial population from file: "+file +"\nReason: "+str(e) + "\nAround line: "+ " ".join(lines[i]))
 		opt_vars = {}
 		for i in range(len(vars)):
 			opt_vars[vars[i]] = i
@@ -47,10 +51,10 @@ class NecFileEvaluator:
 				if "Score" in opt_vars:
 					scores.append(line[opt_vars["Score"]])
 			return (population,scores)
-		except:
+		except Exception as e:
 			if not self.options.verbose: sys.stderr.write('\n')
-			traceback.print_exc()
-			raise
+			if self.options.verbose: traceback.print_exc()
+			raise InputError("\nFailed to parse initial population from file: "+file +"\nReason: "+str(e) + "\nAround line: "+ " ".join(line))
 
 	def saveRestart(self, population, scores):
 		filename = datetime.now().strftime("restart.%y%m%d.%H%M%S.log")
@@ -607,7 +611,10 @@ def optionParser():
 			options.html=""
 
 			if options.sweeps and len(options.sweeps)!=len(options.target_levels) and not options.frequency_data:
-				raise RuntimeError("The number of sweep ranges is not matching the number of target options")
+				if len(options.target_levels) == 0:
+					options.target_levels = len(options.sweeps)*[[0]]
+				else:
+					raise InputError("The number of sweep ranges is not matching the number of target options")
 			
 			if options.sweeps:
 				if options.swr_target: options.swr_target = self.convertToListOfLists(list(map(eval, options.swr_target)), len(options.sweeps), 2)
@@ -671,21 +678,24 @@ def optimize(nec_file_input, options):
 
 def main():
 	random.seed()
-	from nec.input import NecInputFile
 	options, inputs = optionParser().parse_args()
-	nec_file_input = NecInputFile(options.input, options.debug)
-	if  "OPT" in nec_file_input.cmd_options:
-		import shlex
-		options, args = optionParser().parse_args(shlex.split(nec_file_input.cmd_options["OPT"] ) )
-	options.agt_correction = not options.noagt_correction
-	options.angle_step = nec_file_input.angle_step
-	if options.log_file=="":
-		options.log_file = options.input+".opt_log"
-	if options.profile:
-		import cProfile
-		cProfile.runctx('optimize(nec_file_input, options)',globals(), locals())
-	else:
-		optimize(nec_file_input, options)
+	try:
+		nec_file_input = NecInputFile(options.input, options.debug)
+		if  "OPT" in nec_file_input.cmd_options:
+			import shlex
+			options, args = optionParser().parse_args(shlex.split(nec_file_input.cmd_options["OPT"] ) )
+		options.agt_correction = not options.noagt_correction
+		options.angle_step = nec_file_input.angle_step
+		if options.log_file=="":
+			options.log_file = options.input+".opt_log"
+		if options.profile:
+			import cProfile
+			cProfile.runctx('optimize(nec_file_input, options)',globals(), locals())
+		else:
+			optimize(nec_file_input, options)
+	except InputError as e:
+		printOut(e)
+		return
 
 
 if __name__ == "__main__": 
