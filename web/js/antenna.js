@@ -1396,6 +1396,45 @@ vhfHiChart = function(holder, w, h, gain, swr, gainmin, gainmax, swrmax, title) 
     _pattern.hide();
 }
 
+, configureModelPatternTabsNoJQ = function() {
+
+    var d = document, _show_pattern = d.getElementById("show_pattern"),
+	_show_model = d.getElementById("show_model"),
+	_pattern = d.getElementById("pattern"),
+	_model = d.getElementById("model"),
+	selected = "selected",
+	ph,
+
+	onTabClick = function() {
+	    if (this.className == selected) return;
+	    if (_show_pattern.className == selected)
+			_show_pattern.className="";
+		else
+			_show_pattern.className=selected;
+	    if (_show_model.className == selected)
+			_show_model.className="";
+		else
+			_show_model.className=selected;
+			
+	    if (_show_pattern.className == selected){
+	        _pattern.style.display="block";
+	        _model.style.display="none";
+	        if (_pattern.innerHTML == "Loading...") {
+	            ph = _model.innerHTML;
+	            ph = ph.replace("_r.html", "_h.html");
+	            _pattern.innerHTML = ph;
+	        }
+	    } else {
+	        _pattern.style.display="none";
+	        _model.style.display="block";
+	    }
+	};
+
+    _show_pattern.onclick = onTabClick;
+    _show_model.onclick = onTabClick;
+    _pattern.style.display="none";
+}
+
 , configureTabs = function(list_id) {
     var links = $(list_id + " a"),
 	    tab_divs = [],

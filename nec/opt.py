@@ -64,6 +64,8 @@ class NecFileEvaluator:
 			f.write(self.nec_evaluator.formatNumber(float(scores[i]))+"\t"+"\t".join(map(self.nec_evaluator.formatNumber, population[i]))+"\n")
 		f.close()
 
+	def join(self):
+		self.nec_evaluator.process_monitor.join()
 		
 	def __init__(self, nec_file_input, options):
 			#.input, options.output,options.auto_segmentation, options.sweeps, options.target_levels,options.num_cores, options.log_file, options.target_function
@@ -72,6 +74,8 @@ class NecFileEvaluator:
 		self.char_impedance = options.char_impedance
 		self.nec_file_input = nec_file_input
 		self.nec_evaluator = ne.NecEvaluator(nec_file_input, options)
+		from nec.process_monitor import ProcessMonitor
+		self.nec_evaluator.process_monitor = ProcessMonitor(options.engine_kill_time)
 		#print "calculate_gain set to: %d"%self.options.calc.gain
 		
 		self.opt_vars = []
@@ -557,7 +561,7 @@ def optionParser():
 			self.add_option("-M", "--max-iter", default=10000, type="int", help="The default is %default. The script can be interrupted with Ctrl+C at any time and it will output its current best result as 'output.nec'")
 			self.add_option("-L", "--local-search", action="store_true", default = False)
 			self.add_option("-T", "--local-search-tolerance", default = .0001, type="float")
-			self.add_option("-F", "--target-function", default = "max(max_gain_diff, max_swr_diff)", type='string', help="An expression composed of statistical tokens and any of the nec file parameters, by default it is '%default'. All statistical tokes are of the form min_\"value\", max_\"value\", ave_\"value\", min_ave_\"value\", max_ave_\"value\", ave_min_\"value\" and ave_max_\"value\", where \"value\" is one of the following: gain_diff, swr_diff, f2r_diff, f2b_diff, net_gain, raw_gain, ml, swr, agt_correction, f2r, f2b, real and  imag. A full access to all results per frequency is also provided for the same tokens. For example, results[0] gives access to all results for the first sweep, results[0][\"net_gain\"] is an array of all net gains for all frequencies of the first sweep, and finally results[0][\"net_gain\"][0] gives the net gain for the first frequency of the first sweep. The numeric indices are from 0 to count-1, where count is the number of sweeps for the first index and the number of frequencies for the second.")
+			self.add_option("-F", "--target-function", default = "max(max_gain_diff, max_swr_diff)", type='string', help="An expression composed of statistical tokens and any of the nec file parameters, by default it is '%default'. All statistical tokens are of the form min_\"value\", max_\"value\", ave_\"value\", min_ave_\"value\", max_ave_\"value\", ave_min_\"value\" and ave_max_\"value\", where \"value\" is one of the following: gain_diff, swr_diff, f2r_diff, f2b_diff, net_gain, raw_gain, ml, swr, agt_correction, f2r, f2b, real and  imag. A full access to all results per frequency is also provided for the same tokens. For example, results[0] gives access to all results for the first sweep, results[0][\"net_gain\"] is an array of all net gains for all frequencies of the first sweep, and finally results[0][\"net_gain\"][0] gives the net gain for the first frequency of the first sweep. The numeric indices are from 0 to count-1, where count is the number of sweeps for the first index and the number of frequencies for the second.")
 			self.add_option( "--swr-target", default=[], type='string', action="append", help="defines the swr target curve in the same way as target gain is defined. the default value is flat swr (2,2). One per sweep can be specified. The last one defined is used as default if the sweeps are more.")
 			self.add_option( "--f2r-target", default=[], type='string', action="append", help="defines the f2r target curve in the same way as target gain is defined. the default value is flat f2r (15,15). One per sweep can be specified. The last one defined is used as default if the sweeps are more.")
 			self.add_option( "--f2b-target", default=[], type='string', action="append", help="defines the f2b target curve in the same way as target gain is defined. the default value is flat f2b (15,15). One per sweep can be specified. The last one defined is used as default if the sweeps are more.")
@@ -572,8 +576,9 @@ def optionParser():
 			self.add_option("--omni", default=0, action="store_true", help="parse all horizontal angles")
 			self.add_option("--quiet", default=False, action="store_true", help="disable all output but errors")
 			self.add_option("--verbose", default=False, action="store_true", help="enables extra output")
-			self.add_option("--strict-max-target", default=False, action="store_true", help="use if your taget function has no averaging i.e. if the result for a single frequency can be used to declare a model as worse in comperison with the score of another model. The default target function max(max_swr_diff,max_gain_diff) is an example of such function. Setting this option will speed up the optimization, but it has to be used correctly.")
+			self.add_option("--strict-max-target", default=False, action="store_true", help="use if your target function has no averaging i.e. if the result for a single frequency can be used to declare a model as worse in comparison with the score of another model. The default target function max(max_swr_diff,max_gain_diff) is an example of such function. Setting this option will speed up the optimization, but it has to be used correctly.")
 			self.add_option("--profile", default=False, action="store_true")
+			self.add_option("--engine-kill-time", type="int", default=3600, help="Maximum time the nec engine is allowed to run before it is considered hanging and killed. After 100 successful engine invocations this value is updated with 10x the actual maximum running time of all previous engine invocations")
 
 		def convertToListOfLists(self, _list, size=None, default=None):
 			if size is not None and len(_list) < size:
@@ -675,6 +680,9 @@ def optimize(nec_file_input, options):
 		evaluator.evaluateFinalSolution()
 	except KeyboardInterrupt:
 		evaluator.evaluateFinalSolution(1)
+	finally:
+		evaluator.join()
+		
 
 def main():
 	random.seed()

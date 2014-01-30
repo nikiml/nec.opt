@@ -8,6 +8,8 @@ from nec.print_out import printOut
 from nec.output_parser import FrequencyData, NecOutputParser
 from nec.html import HtmlOutput
 from nec.input import NecInputFile, InputError
+from random import random
+from time import sleep
 
 output = "output"
 input = "input.nec"
@@ -43,6 +45,7 @@ class Sweep:
 
 class NecEvaluator:
 	def __init__(self, nec_file_input, options):
+		self.process_monitor = None
 		self.options = options
 		self.nec_file_input = nec_file_input
 		self.wire_structure = WireStructure(options)
@@ -274,6 +277,17 @@ class NecEvaluator:
 		lines.append("XQ")
 		lines.append("EN")
 		return lines
+
+	def handlePopen(self, popen):
+		import pdb
+		#pdb.set_trace()
+		try:
+			if self.process_monitor:
+				self.process_monitor.addProcess(popen)
+			popen.wait()
+		finally:
+			if self.process_monitor:
+				self.process_monitor.removeProcess(popen)
 	
 	def runSweep(self, nec_input_lines, sweep, get_agt_scores=0, use_agt = None, id=""):
 		#print "Get agt score = %d"%get_agt_scores
@@ -309,8 +323,7 @@ class NecEvaluator:
 			agt = use_agt
 		elif self.options.agt_correction or get_agt_scores :
 			if self.options.engine_takes_cmd_args:
-				popen = sp.Popen([engine, agt_input, nec_output] )
-				popen.wait()
+				self.handlePopen(sp.Popen([engine, agt_input, nec_output] ))
 			else:
 				try:
 					f = open(exe_input,"wt")
@@ -320,16 +333,14 @@ class NecEvaluator:
 					f.write("\n")
 					f.close()
 					f = open(exe_input)
-					popen = sp.Popen(engine, stdin=f, stdout=open(os.devnull, "w"))
-					popen.wait()
+					self.handlePopen(sp.Popen(engine, stdin=f, stdout=open(os.devnull, "w")))
 				finally:
 					f.close()
 			agt = self.parseAgt(nec_output)
 			if get_agt_scores:
 				return (nec_output,agt)
 		if self.options.engine_takes_cmd_args:
-			popen = sp.Popen([engine, nec_input, nec_output] )
-			popen.wait()
+			self.handlePopen(sp.Popen([engine, nec_input, nec_output] ))
 		else:
 			try:
 				f = open(exe_input,"wt")
@@ -339,8 +350,7 @@ class NecEvaluator:
 				f.write("\n")
 				f.close()
 				f = open(exe_input)
-				popen = sp.Popen(engine, stdin=f, stdout=open(os.devnull, "w"))
-				popen.wait()
+				self.handlePopen(sp.Popen(engine, stdin=f, stdout=open(os.devnull, "w")))
 			finally:
 				f.close()
 		return (nec_output,agt)
