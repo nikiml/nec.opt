@@ -1,3 +1,4 @@
+from __future__ import division
 from nec.demathutils import mean_value, min_value
 from nec.print_out import printOut
 

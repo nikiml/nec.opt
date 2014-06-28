@@ -1,3 +1,4 @@
+from __future__ import division
 import math, os
 
 gdrive_link_base = "https://drive.google.com/uc?id="#confirm=no_antivirus&id="

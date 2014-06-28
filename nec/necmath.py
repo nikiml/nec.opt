@@ -1,3 +1,4 @@
+from __future__ import division
 from math import *
 def sgn(a):
 	if a < 0: return -1

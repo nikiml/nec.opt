@@ -1,6 +1,12 @@
 import winreg as wr
 import sys
 
+def fileCreate(file):
+	try:
+		file_created(file)
+	except:
+		pass
+
 def createBatFiles():
 	dir = sys.prefix+"\\lib\\site-packages\\nec\\"
 	eval = open(dir+"eval.bat", "wt")
@@ -11,7 +17,7 @@ def createBatFiles():
 	eval.write("python -m nec.eval %1\n")
 	eval.write("pause\n")
 	eval.close()
-	file_created(dir+"eval.bat")
+	fileCreate(dir+"eval.bat")
 
 	opt = open(dir+"opt.bat", "wt")
 	opt.write("@echo off\n")
@@ -22,7 +28,7 @@ def createBatFiles():
 	opt.write("python -m nec.opt %1\n")
 	opt.write("pause\n")
 	opt.close()
-	file_created(dir+"opt.bat")
+	fileCreate(dir+"opt.bat")
 
 	opt = open(dir+"restart.bat", "wt")
 	opt.write("@echo off\n")
@@ -32,7 +38,7 @@ def createBatFiles():
 	opt.write("python -m nec.extract_last_population -n-1 -s -r -l %1 \n")
 	opt.write("pause\n")
 	opt.close()
-	file_created(dir+"restart.bat")
+	fileCreate(dir+"restart.bat")
 
 def registerBatFile(ext, bat, name):
 	ext_key = wr.CreateKey(wr.HKEY_CLASSES_ROOT, '.'+ext)
@@ -68,11 +74,14 @@ def unregisterCommand(ext, name):
 	except: pass
 		
 def install():
+	log = open("s:\\tmp\install.log","w")
 	createBatFiles()
+	log.write("bat files created\n")
 	dir = sys.prefix+"\\lib\\site-packages\\nec\\"
 	registerBatFile('nec', dir+'eval.bat', 'Evaluate')
 	registerBatFile('nec', dir+'opt.bat', 'Optimize')
 	registerBatFile('opt_log', dir+'restart.bat', 'Generate restart file')
+	log.write("registration completed\n")
 	
 def remove():
 	unregisterCommand('nec', 'Evaluate')

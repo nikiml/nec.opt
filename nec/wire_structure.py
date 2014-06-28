@@ -1,3 +1,4 @@
+from __future__ import division
 from nec.demathutils import v3add, v3mul, v3sub, v3dot, v3cross, v3len, v3unit, v3rotx, v3roty, v3rotz
 from nec import necmath
 
@@ -138,9 +139,9 @@ class WireStructure:
 
 	def moveStructure(self, lines, rng, tincr, rx, ry,rz, x,y,z):
 		#print "moving %d lines, from %d to %d, incrementing tags with %d"%(rng[1]-rng[0],rng[0],rng[1],tincr)
-		rx = necmath.pi*rx/180
-		ry = necmath.pi*ry/180
-		rz = necmath.pi*rz/180
+		rx = necmath.pi*rx/180.0
+		ry = necmath.pi*ry/180.0
+		rz = necmath.pi*rz/180.0
 		for i in range(rng[0], rng[1]):
 			if lines[i][0]:
 				lines[i][0]+=tincr

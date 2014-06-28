@@ -2,6 +2,7 @@
 # Distributed under GNU General Public License v3
 
 
+from __future__ import division
 import nec.differential_evolution as DE
 import os, math,sys,traceback,time,random
 from nec import eval as ne

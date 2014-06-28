@@ -1,13 +1,14 @@
 # Copyright 2010-2012 Nikolay Mladenov, Distributed under 
 # GNU General Public License
 
+from __future__ import division
 import sys, traceback, os, pprint
 from nec import necmath
 from nec.wire_structure import WireStructure
 from nec.print_out import printOut
 from nec.output_parser import FrequencyData, NecOutputParser
 from nec.html import HtmlOutput
-from nec.input import NecInputFile, InputError
+from nec.input import NecInputFile, InputError, EvalError
 from random import random
 from time import sleep
 
@@ -48,7 +49,10 @@ class NecEvaluator:
 		self.process_monitor = None
 		self.options = options
 		self.nec_file_input = nec_file_input
-		self.wire_structure = WireStructure(options)
+		if self.options.validate_geometry:
+			self.wire_structure = WireStructure(options)
+		else:
+			self.wire_structure = None
 		if options.engine_takes_cmd_args=='yes' or options.engine_takes_cmd_args=='auto' and os.name!='nt':
 			self.options.engine_takes_cmd_args = 1
 		else: self.options.engine_takes_cmd_args = 0
@@ -58,7 +62,8 @@ class NecEvaluator:
 				if self.options.param_values_file:
 					self.parseParameterValues(self.options.param_values_file)
 					self.writeParametrized("output.nec")
-			except AttributeError:
+					printOut("Using parameters from file: %s (see output.nec)\n"%self.options.param_values_file)
+			except (AttributeError, IOError):
 				pass
 		self.nec_file_input.autoSegmentation(self.options.auto_segmentation)
 		self.prepareSweeps()
@@ -139,7 +144,7 @@ class NecEvaluator:
 
 					if neccard == "GX":
 						i1 = int(ev(ln[1]))
-						self.wire_structure.mirrorStructure(math_lines,comments, i1, int(ln[2][0]), int(ln[2][1]), int(ln[2][2]))
+						if self.wire_structure : self.wire_structure.mirrorStructure(math_lines,comments, i1, int(ln[2][0]), int(ln[2][1]), int(ln[2][2]))
 						lines[-1]="GX %d %s"%(i1,ln[2])
 					elif neccard == "GM":
 						if len(ln) < 10:
@@ -153,12 +158,12 @@ class NecEvaluator:
 						f7 = ev(ln[7])
 						f8 = ev(ln[8])
 						i9 = int(ev(ln[9]))
-						self.wire_structure.moveCopyStructure(math_lines,comments, i1, i2, f3, f4, f5, f6, f7, f8, i9)
+						if self.wire_structure : self.wire_structure.moveCopyStructure(math_lines,comments, i1, i2, f3, f4, f5, f6, f7, f8, i9)
 						lines[-1]="GM %d %d %f %f %f %f %f %f %d"%(i1, i2, f3, f4, f5, f6, f7, f8, i9)
 					elif neccard == "GR":
 						i1 = int(ev(ln[1]))
 						i2 = int(ev(ln[2]))
-						self.wire_structure.rotateStructure(math_lines,comments, i1, i2)
+						if self.wire_structure : self.wire_structure.rotateStructure(math_lines,comments, i1, i2)
 						lines[-1]="GR %d %d"%(i1, i2)
 					elif neccard == "SP":
 						i1 = int(ln[1])
@@ -217,10 +222,11 @@ class NecEvaluator:
 					sline = map(fn, sline)
 					lines.append(ln[0]+" "+" ".join(sline))
 			except Exception as e:
-				raise InputError("Failed to generate engine input. Reason:\n"+str(e)+"\nAround line:\n"+" ".join(ln))
+				raise EvalError("Failed to generate engine input. Reason:\n"+str(e)+"\nAround line:\n"+" ".join(ln))
 			
-		if not self.wire_structure.testLineIntersections(math_lines):
-			return []
+		if self.wire_structure : 
+			if not self.wire_structure.testLineIntersections(math_lines):
+				return []
 		segment_count += sum(list(map(lambda x: x[1], math_lines)))
 		return lines, segment_count
 
@@ -382,6 +388,8 @@ class NecEvaluator:
 		num_cores = self.options.num_cores
 		sweeps = self.options.sweeps
 		if not total_freqs: 
+			if not sweeps:
+				 raise  InputError("No frequencies specified for evaluation")
 			for i in sweeps: 
 				total_freqs = total_freqs+i[2]
 		self.sweeps = []
@@ -612,7 +620,8 @@ class OptionParser(optparse.OptionParser):
 		self.add_option("-e", "--engine", metavar="NEC_ENGINE", default="", help="nec engine file name, default=%default")
 		self.add_option("--engine-takes-cmd-args", default="auto", type="string", help="the nec engine takes command args, default=auto (which means no on windows yes otherwise). Other options are 'yes' or 'no'.")
 		self.add_option("-d", "--min-wire-distance", default=.005, type="float", help="minimum surface-to-surface distance allowed between non-connecting wires, default=%default")
-		self.add_option("--debug", default=0, type="int", help="turn on some loging")
+		self.add_option("--debug", default=0, type="int", help="turn on some logging")
+		self.add_option("--validate-geometry", default=1, type="int", help="set to 0 to disable geometry validation")
 		self.add_option("--forward-dir", default=0, type="int", help="the forward direction, by default is 0 which means the antenna forward is along X.")
 		self.add_option("--backward-dir", default=180, type="int", help="the backward direction (relative to --forward-dir) to which F/R and F/B are calculated. The default is 180 which means the exact opposite of the forward-dir")
 		self.add_option("--rear-angle", default=120, type="int", help="angle for calculating rear gain (max 270)")
@@ -652,7 +661,7 @@ def optionParser():
 	class MainOptionParser(OptionParser):
 		def __init__(self):
 			OptionParser.__init__(self)
-			self.add_option("--param-values-file", default="", help="Read the parameter values from file, generate output.nec and evaluate it instead of the input file. The file should contain two lines: space separated parameter names on the first and space separated values on the second.")
+			self.add_option("--param-values-file", default="params.txt", help="Read the parameter values from file, generate output.nec and evaluate it instead of the input file. The file should contain two lines: space separated parameter names on the first and space separated values on the second.")
 			self.add_option("--agt-correction", default=1, type="int", help="ignored. agt correction is always applied")
 			self.add_option("-c", "--centers", default=True, help="run sweep on the channel centers",action="store_false", dest="ends")
 			self.add_option("--chart", default=0, action="store_true", help="IGNORED")

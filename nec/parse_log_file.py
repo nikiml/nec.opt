@@ -1,3 +1,4 @@
+from __future__ import division
 from nec.print_out import printOut
 
 def distance(m1, m2, min_dif, num_calculated):

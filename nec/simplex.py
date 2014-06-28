@@ -1,3 +1,4 @@
+from __future__ import division
 from nec.demathutils import *
 import operator
 from nec.print_out import printOut

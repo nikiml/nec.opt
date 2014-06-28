@@ -1,5 +1,6 @@
 # Copyright 2010-2012 Nikolay Mladenov, Distributed under 
 # GNU General Public License
+from __future__ import division
 
 import sys, traceback, os, pprint, functools
 from nec import necmath
@@ -10,6 +11,11 @@ nec_cards =["SY","CM","CE","GA","GE","GF","GH","GM","GR","GS","GW","GX","SP","SM
 class InputError(RuntimeError):
 	def __init__(self, msg):
 		RuntimeError.__init__(self, msg)
+
+class EvalError(RuntimeError):
+	def __init__(self, msg):
+		RuntimeError.__init__(self, msg)
+		
 		
 class NecInputFile:
 	def __init__(self, input, debug=0):
@@ -68,7 +74,7 @@ class NecInputFile:
 			new = line_tokens[2].strip()
 			start_tag = 0 
 			if line_tokens[0]=="GX": 
-				new = (1+int(new[0]))*(1+int(new[1]))*(1+int(new[2]))
+				new = (1+int(new[0]))*(1+int(new[1]))*(1+int(new[2]))-1
 			else:
 				new = int(self.parser.evalToken(new))
 				if line_tokens[0]=="GR": new-=1
@@ -86,12 +92,12 @@ class NecInputFile:
 			if start_pos:
 				for i in range(len(self.tag_data)):
 					if self.tag_data[i][0] == start_pos:
-						sart_pos = i
+						start_pos = i
 						break
 			end_pos = len(self.tag_data)
-			for i in range(0,new):
+			for i in range(1,new+1):
 				for t in range(start_pos,end_pos):
-					self.tag_data.append( (self.tag_data[i][0]+i*inc, self.tag_data[i][1] ) )
+					self.tag_data.append( (self.tag_data[t][0]+i*inc, self.tag_data[t][1] ) )
 
 		def finalize(self):
 			ts = {}
@@ -102,7 +108,7 @@ class NecInputFile:
 					ts[i[0]].append(i[1])
 			self.tag_data = ts
 
-		#do we have uniques segmentation for a tag?, needed for EX, NT or TL cards which reference wire by tag and segment no
+		#do we have unique segmentation for a tag?, needed for EX, NT or TL cards which reference wire by tag and segment no
 		def tagSegments(self, tag, ref_card):
 			if tag not in self.tag_data.keys():
 				raise InputError("Invalid tag reference %d in %s card" %(tag,ref_card))
@@ -153,11 +159,11 @@ class NecInputFile:
 				assert self.requiresOdd() and seg_count%2 or self.requiresEven() and not seg_count%2
 				end = self.end
 				if not end :
-					return (seg_count+1)/2
+					return int((seg_count+1)/2)
 				elif end < 0:
-					return seg_cout/2 +1
+					return int(seg_cout/2 +1)
 				else:
-					return seg_cout/2 
+					return int(seg_cout/2 )
 			if self.isStart():
 				return 1
 			if self.isEnd():
@@ -267,6 +273,8 @@ class NecInputFile:
 		self.segment_references={}
 		self.comments = []
 		#self.fixed_segmentation = []
+		comments_allowed=1
+		code_allowed=1
 		self.tag_data = NecInputFile.TagRecorder(self)
 		for i in range(len(self.lines)):
 			ln = self.lines[i].strip('\n')
@@ -282,6 +290,8 @@ class NecInputFile:
 			if neccard not in nec_cards:
 				raise InputError("Unknown nec card: "+neccard)
 			if neccard == "CM" and (ln[0:5].upper()=="CMD--" or ln[0:6].upper()=="CM D--"):
+				if not comments_allowed:
+					raise InputError("CM card after CE card")
 				ln = (ln[5:] if ln[0:5].upper()=="CMD--" else ln[6:]).split(' ')
 				if len (ln) > 1:
 					if ln[0] in self.cmd_options:
@@ -291,6 +301,14 @@ class NecInputFile:
 			elif neccard== "SY":
 				self.parseSYLine(ln, comment, i)
 			else:
+				if neccard == "EN":
+					code_allowed=0
+				else:
+					if not code_allowed:
+						raise InputError("Extra cards after EN")
+					if neccard == "CE":
+						comments_allowed=0
+				
 				self.srclines.append(ln.replace(',',' ').split())
 				self.comments.append(comment)
 				srclineno = len(self.srclines)-1
@@ -401,7 +419,7 @@ class NecInputFile:
 		for d in self.dependent_vars:
 			try: self.evalVarLine(d,necmath.__dict__, self.globals)
 			except Exception as e:
-				raise InputError("Failed to evaluate variable:  '%s'\n"%(d) + "\nReason: "+str(e))
+				raise EvalError("Failed to evaluate variable:  '%s'\n"%(d) + "\nReason: "+str(e))
 		
 	def parametrizedLines(self, extralines=[], skiptags=[], comments=[]):
 		self.updateGlobalVars()
@@ -455,7 +473,7 @@ class NecInputFile:
 
 	def updateVars(self, names, vals):
 		for i in range(len(names)):
-			if names[i] not in self.vars: raise InputError("invalid Parameter name: "+names[i])
+			if names[i] not in self.vars: continue
 			self.vars[names[i]] = vals[i]
 		
 		

@@ -1,5 +1,6 @@
 # Copyright 2010 Nikolay Mladenov, Distributed under 
 # GNU General Public License
+from __future__ import division
 
 import sys, traceback, os, pprint
 from nec import necmath

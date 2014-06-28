@@ -3,6 +3,7 @@ nec_eval.sh
 nec_opt.sh
 nec_restart_gen.sh
 nec/demathutils.py
+nec/process_monitor.py
 nec/differential_evolution.py
 nec/eval.py
 nec/extract_item_history.py

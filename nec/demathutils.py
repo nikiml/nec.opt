@@ -1,3 +1,4 @@
+from __future__ import division
 import operator
 import random 
 import math
