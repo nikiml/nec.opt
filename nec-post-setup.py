@@ -74,14 +74,11 @@ def unregisterCommand(ext, name):
 	except: pass
 		
 def install():
-	log = open("s:\\tmp\install.log","w")
 	createBatFiles()
-	log.write("bat files created\n")
 	dir = sys.prefix+"\\lib\\site-packages\\nec\\"
 	registerBatFile('nec', dir+'eval.bat', 'Evaluate')
 	registerBatFile('nec', dir+'opt.bat', 'Optimize')
 	registerBatFile('opt_log', dir+'restart.bat', 'Generate restart file')
-	log.write("registration completed\n")
 	
 def remove():
 	unregisterCommand('nec', 'Evaluate')

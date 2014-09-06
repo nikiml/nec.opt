@@ -3,7 +3,7 @@
 */
 var NecViewer = (function(nv) {
 var cards = 		["gw","g1","g2","g3","g4","g5","g6","g7","gc","ga","ge","gh","gm","gr","gs","gx","sp","sc","sm","ex","cl"],
-compressed_cards =  ["W", "f", "o", "i", "l", "K", "I", "J", "w", "A ", "", "H", "T", "R", "S", "X", "P", "p", "M", "E", "C"],
+compressed_cards =  ["W", "f", "o", "i", "l", "K", "I", "J", "w", "A", "",  "H", "T", "R", "S", "X", "P", "p", "M", "E", "C"],
 decompress_map = (function(){var res = {},i; for(i=0;i!=cards.length; ++i){res[compressed_cards[i]]=cards[i];} return res;})();
 
 nv.decompress = function(nec) {

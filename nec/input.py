@@ -87,7 +87,7 @@ class NecInputFile:
 			rad = line[-1]
 			self.tag_data.append((tag, NecInputFile.TagData(lineno,nsegs, rad)) )
 			if line[2][0] == "+":
-				self.fixed_segmentation.append(srclineno)
+				self.fixed_segmentation.append(lineno)
 		def update(self, new, inc, start_pos):
 			if start_pos:
 				for i in range(len(self.tag_data)):
@@ -314,7 +314,7 @@ class NecInputFile:
 				srclineno = len(self.srclines)-1
 				srcline = self.srclines[srclineno]
 				if neccard in ["GW","GA","GH"]:
-					self.tag_data.addWire(srcline, i)
+					self.tag_data.addWire(srcline, srclineno)
 				if neccard=="GM" or neccard=="GR" or neccard=="GX":
 					self.tag_data.addTransformation(srcline)
 				if neccard=="EX":
@@ -345,14 +345,14 @@ class NecInputFile:
 		if type == "GW":
 			return self.scale*necmath.sqrt(necmath.pow(line[2]-line[5],2)+necmath.pow(line[3]-line[6],2)+necmath.pow(line[4]-line[7],2))
 		elif type=="GA":
-			return line[3]*necmath.radians(abs(line[5]-line[4]) )
+			return line[2]*necmath.radians(abs(line[4]-line[3]) )
 		elif type=="GH": #estimate
-			if line[3] <=0 : return 0
-			turns = line[4]/line[3]
-			start_perimeter = 2*necmath.pi*necmath.sqrt( (line[5]*line[5]+line[6]*line[6])/2 )
-			end_perimeter = 2*necmath.pi*necmath.sqrt( (line[7]*line[7]+line[8]*line[8])/2 )
+			if line[2] <=0 : return 0
+			turns = line[3]/line[2]
+			start_perimeter = 2*necmath.pi*necmath.sqrt( (line[4]*line[4]+line[5]*line[5])/2 )
+			end_perimeter = 2*necmath.pi*necmath.sqrt( (line[6]*line[6]+line[7]*line[7])/2 )
 			average_perimeter = (start_perimeter+end_perimeter)/2
-			return sqrt(average_perimeter*turns * average_perimeter*turns + line[4]*line[4])
+			return sqrt(average_perimeter*turns * average_perimeter*turns + line[3]*line[3])
 
 
 	def autoSegment(self, type, line):
@@ -362,10 +362,8 @@ class NecInputFile:
 		tag = line[0]
 		segs = line[1]
 		if tag in self.segment_references:
-			requiresEven = lambda x,y : x.requiresEven() or y.requiresEven()
-			requiresOdd = lambda x,y : x.requiresOdd() or y.requiresOdd()
-			even = functools.reduce( requiresEven, self.segment_references[tag], self.segment_references[tag][0])
-			odd = functools.reduce( requiresOdd, self.segment_references[tag], self.segment_references[tag][0])
+			even = functools.reduce( lambda x,y: x or y, map(lambda x: x.requiresEven(), self.segment_references[tag]) )
+			odd = functools.reduce( lambda x,y: x or y, map(lambda x: x.requiresOdd(), self.segment_references[tag]) )
 			if even and odd:
 				raise InputError("Both even and odd segmentation is required for tag %d"%tag)
 			if (even and segs % 2) or (odd and not segs % 2) :

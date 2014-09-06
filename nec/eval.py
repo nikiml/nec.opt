@@ -285,8 +285,6 @@ class NecEvaluator:
 		return lines
 
 	def handlePopen(self, popen):
-		import pdb
-		#pdb.set_trace()
 		try:
 			if self.process_monitor:
 				self.process_monitor.addProcess(popen)
