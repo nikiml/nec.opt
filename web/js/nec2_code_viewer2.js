@@ -16,7 +16,7 @@ if("Identifier"===n.type)return n.name in r||o(),r[n.name]
 if("Literal"===n.type)return n.value
 if("CallExpression"===n.type)return t=n.arguments.map(function(n){return D(n,r,e)}),D(n.callee,r,e)[w](0,t)
 if("UnaryExpression"===n.type){if(t=D(n.argument,r,e),"-"===n.operator)return-t
-if("+"!==n.operator)return t
+if("+"===n.operator)return t
 o()}if("BinaryExpression"===n.type){if(t=D(n.left,r,e),i=D(n.right,r,e),"-"===n.operator)return t-i
 if("+"===n.operator)return t+i
 if("*"===n.operator)return t*i

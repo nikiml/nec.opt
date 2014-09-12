@@ -132,10 +132,13 @@ class NecOutputParser:
 		lines = []
 		if not self.options.frequency_data:
 			if header: 
-				l = "%6s %8s %8s %7s %7s %7s %7s %8s %8s %12s"%("Freq", "RawGain", "NetGain", "SWR", "BeamW", "F/R", "F/B", "Real", "Imag", "AGT(corr)")
+				l = " %6s%14s%6s%6s%14s%16s%11s"%(" ", "--- Gain ---", " ", " ", "-- Ratios --", "-- Impedance --", " ")
 				printOut( l )
 				lines.append(l)
-				l = "========================================================================================="
+				l = " %6s%7s%7s%6s%6s%7s%7s%8s%8s%5s%6s"%("Freq", "Raw", "Net", "SWR", "BeamW", "F/R", "F/B", "Real", "Imag", "AGT", "corr")
+				printOut( l )
+				lines.append(l)
+				l = "=========================================================================="
 				printOut( l)
 				lines.append(l)
 			#if self.agt!=0:
@@ -156,41 +159,44 @@ class NecOutputParser:
 						net = i.net(raw)
 						if self.options.calc.f2r:
 							rear = i.rearGain(self.options.rear_angle,self.options.backward_dir)
-							rear = "% 7.3f"%(net-rear)
+							rear = "% 7.2f"%(net-rear)
 						if self.options.calc.f2b:
 							back = i.backwardGain(self.options.backward_dir)
-							back = "% 7.3f"%(net-back)
-						raw = "% 8.3f"%raw
-						net = "% 8.3f"%net
+							back = "% 7.2f"%(net-back)
+						raw = "% 7.2f"%raw
+						net = "% 7.2f"%net
 						if self.options.calc.beam_width:
-							beam_width = "% 7.1f"%i.beamWidth(self.options.forward_dir, self.options.angle_step, self.options.beamwidth_ratio)
-					l = "% 6.1f % 8s % 8s % 7.3f % 7s % 7s % 7s % 8.2f % 8.2f %5.2f(% 6.3f)"%(i.freq, raw, net,i.swr(), beam_width, rear, back, i.real, i.imag, i.AGT, i.agt)
+							beam_width = "% 6.1f"%i.beamWidth(self.options.forward_dir, self.options.angle_step, self.options.beamwidth_ratio)
+					l = " % 6.1f% 7s% 7s% 6.2f% 6s% 7s% 7s% 8.2f% 8.2f%5.2f% 6.2f"%(i.freq, raw, net,i.swr(), beam_width, rear, back, i.real, i.imag, i.AGT, i.agt)
 					printOut( l)
 					lines.append(l)
 
 		else:
 			if header: 
-				l = "%6s %7s %6s %8s %8s %7s %8s %8s %7s %12s"%("Freq", "Target", "Angle", "RawGain", "NetGain", "SWR", "Real", "Imag", "Diff", "AGT(corr)")
+				l = " %6s%7s%28s%6s%16s%12s"%(" ", " ", "- - - - - - Gain - - - - - -", " ", "-- Impedance --", " ")
+				printOut( l )
+				lines.append(l)
+				l = " %6s%7s%7s%7s%7s%7s%6s%8s%8s%5s%6s"%("Freq", "Angle", "Goal", "Diff", "Raw", "Net", "SWR", "Real", "Imag", "AGT", "corr")
 				printOut( l)
 				lines.append(l)
-				l = "========================================================================================="
+				l = "============================================================================"
 				printOut( l)
 				lines.append(l)
 			for i in self.frequencies:
 				if not i.valid():
-					l = "%6.4g - invalid result"%i.freq
+					l = " %6.4g - invalid result"%i.freq
 					printOut( l)
 					lines.append(l)
 				else:
 					target = self.options.frequency_data[i.freq][1]
-					l = "% 6.1f % 7.2f % 6.1f % 8.3f % 8.3f % 7.3f % 8.2f % 8.2f % 7.3f %5.2f(% 6.3f)"%(i.freq, target, i.angle, i.gain, i.net(),i.swr(), i.real, i.imag, target-i.net(), i.AGT, i.agt)
+					l = " % 6.1f% 7.1f% 7.2f% 7.2f% 7.2f% 7.2f% 6.2f% 8.2f% 8.2f%5.2f% 6.2f"%(i.freq, i.angle, target, target-i.net(), i.gain, i.net(),i.swr(), i.real, i.imag, i.AGT, i.agt)
 					printOut( l)
 					lines.append(l)
 		return lines
 	def getGainSWRChartData(self):
 		res = []
 		for i in self.frequencies:
-			res.append((int(i.freq), (i.net(),i.swr())))
+			res.append((i.freq, (i.net(),i.swr())))
 		return res
 	def horizontalPattern(self):
 		res = {}

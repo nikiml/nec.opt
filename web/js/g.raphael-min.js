@@ -54,7 +54,7 @@ if(e==i)return{from:e,to:i,power:0}
 var s=(i-e)/h,n=~~s,o=n,l=0
 if(s==n)return{from:e,to:i,power:0}
 if(n){for(;o;)l--,o=~~(s*Math.pow(10,l))/Math.pow(10,l)
-l++}else{for(;!n;)l=l||1,n=~~(s*Math.pow(10,l))/Math.pow(10,l),l++
+l+=2}else{for(;!n;)l=l||1,n=~~(s*Math.pow(10,l))/Math.pow(10,l),l++
 l&&l--}return i=r(a*Math.pow(10,l))/Math.pow(10,l),a>i&&(i=r((a+.5)*Math.pow(10,l))/Math.pow(10,l)),e=r((t-(l>0?0:.5))*Math.pow(10,l))/Math.pow(10,l),{from:e,to:i,power:l}},Raphael.fn.g.axis=function(t,a,h,r,e,i,s,n,o,l){l=null==l?2:l,o=o||"t",i=i||10
 var f="|"==o||" "==o?["M",t+.5,a,"l",0,.001]:1==s||3==s?["M",t+.5,a,"l",0,-h]:["M",t,a+.5,"l",h,0],u=this.g.snapEnds(r,e,i),p=u.from,c=u.to,g=u.power,M=0,d=this.set(),x=(c-p)/i,R=p,w=g>0?g:0
 if(y=h/i,1==+s||3==+s){for(var v=a,b=(s-1?1:-1)*(l+3+!!(s-1));v>=a-h;)"-"!=o&&" "!=o&&(f=f.concat(["M",t-("+"==o||"|"==o?l:!(s-1)*l*2),v+.5,"l",2*l+1,0])),d.push(this.text(t+b,v,n&&n[M++]||(Math.round(R)==R?R:+R.toFixed(w))).attr(this.g.txtattr).attr({"text-anchor":s-1?"start":"end"})),R+=x,v-=y

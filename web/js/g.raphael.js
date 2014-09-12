@@ -365,7 +365,7 @@
                 i--;
                 R = ~~(d * Math.pow(10, i)) / Math.pow(10, i);
             }
-            i ++;
+            i +=2;
         } else {
             while (!r) {
                 i = i || 1;

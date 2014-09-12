@@ -49,10 +49,7 @@ class NecEvaluator:
 		self.process_monitor = None
 		self.options = options
 		self.nec_file_input = nec_file_input
-		if self.options.validate_geometry:
-			self.wire_structure = WireStructure(options)
-		else:
-			self.wire_structure = None
+		self.wire_structure = WireStructure(options)
 		if options.engine_takes_cmd_args=='yes' or options.engine_takes_cmd_args=='auto' and os.name!='nt':
 			self.options.engine_takes_cmd_args = 1
 		else: self.options.engine_takes_cmd_args = 0
@@ -224,7 +221,7 @@ class NecEvaluator:
 			except Exception as e:
 				raise EvalError("Failed to generate engine input. Reason:\n"+str(e)+"\nAround line:\n"+" ".join(ln))
 			
-		if self.wire_structure : 
+		if self.wire_structure and self.options.validate_geometry: 
 			if not self.wire_structure.testLineIntersections(math_lines):
 				return []
 		segment_count += sum(list(map(lambda x: x[1], math_lines)))
