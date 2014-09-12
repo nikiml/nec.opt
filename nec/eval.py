@@ -617,9 +617,9 @@ class OptionParser(optparse.OptionParser):
 		self.add_option("-d", "--min-wire-distance", default=.005, type="float", help="minimum surface-to-surface distance allowed between non-connecting wires, default=%default")
 		self.add_option("--debug", default=0, type="int", help="turn on some logging")
 		self.add_option("--validate-geometry", default=1, type="int", help="set to 0 to disable geometry validation")
-		self.add_option("--forward-dir", default=0, type="int", help="the forward direction, by default is 0 which means the antenna forward is along X.")
-		self.add_option("--backward-dir", default=180, type="int", help="the backward direction (relative to --forward-dir) to which F/R and F/B are calculated. The default is 180 which means the exact opposite of the forward-dir")
-		self.add_option("--rear-angle", default=120, type="int", help="angle for calculating rear gain (max 270)")
+		self.add_option("--forward-dir", default=0, type="int", help="the forward direction, by default is %default which means the antenna forward is along X.")
+		self.add_option("--backward-dir", default=180, type="int", help="the backward direction (relative to --forward-dir) to which F/R and F/B are calculated. The default is %default which means the exact opposite of the forward-dir")
+		self.add_option("--rear-angle", default=120, type="int", help="angle for calculating rear gain (max 270). default = %default")
 		self.add_option("--beamwidth-ratio", default=3.01, type="float", help="ratio for calculating beam width in dB, default=%default")
 		self.set_defaults(gain_type=1)
 		self.add_option("--vertical-gain", action="store_const", const=0, dest="gain_type", help="calculate vertical gain ")
@@ -661,7 +661,7 @@ def optionParser():
 			self.add_option("-c", "--centers", default=True, help="run sweep on the channel centers",action="store_false", dest="ends")
 			self.add_option("--chart", default=0, action="store_true", help="IGNORED")
 			self.add_option("--js-model", default=0, action="store_true", help="IGNORED")
-			self.add_option("--html", default=1, help="output html file, set to 0 to disable")
+			self.add_option("--html", default=1, type="int", help="output html file, set to 0 to disable")
 		def parse_args(self, extra_args=[]):
 			options, args = OptionParser.parse_args(self,extra_args)
 			class Calc: pass
