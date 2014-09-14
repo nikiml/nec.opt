@@ -497,10 +497,10 @@ var NecViewer = (function(nv) {
 	cleanupURL = function(s) {
 	    var subs =
 			[".html#", ".html?", /%26/g, "&", /%23/g, "", /%22/g, "",
-			 /%27/g, "", /%20/g, '', /%5B;/g, "[", /%5D;/g, "]",
+			 /%27/g, "", /%5B;/g, "[", /%5D;/g, "]",
 			  /&#38;/g, "&", /&#35;/g, "", /&#39;/g, "", /&#34;/g, "",
-			   /&#32;/g, "", /&#91;/g, "[", /&#93;/g, "]", /"/g, "",
-			    /'/g, "", / /g, "", /#/g, "", /"/g, "", /&quot;/g, "",
+			   /&#91;/g, "[", /&#93;/g, "]", /"/g, "",
+			    /'/g, "", /#/g, "", /"/g, "", /&quot;/g, "",
 			     /&amp;/g, "&"],
 			     l = subs[length], i;
 	    for (i = 0; i != l; i += 2) {
@@ -511,13 +511,19 @@ var NecViewer = (function(nv) {
 	loc = loca || cleanupURL(decodeURI(window.location.toString())),
 	parts = loc[split](/[?&]/),	i, s, 
 	w = rwidth || nv.getClientWidth(), h = rheight || nv.getClientHeight(),
-	configurations = [], geometry = [];
+	configurations = [], geometry = [], name=_undefined;
         try {
             for (i = 1; i < parts[length]; ++i) {
                 s = parts[i][indexOf]("message=");
                 if (s != -1) {
                     doc[getElementById](geometry_id)[innerHTML] = parts[i][substr](s + 8);
                     return;
+                }
+
+                s = parts[i][indexOf]("name=");
+                if (s != -1) {
+                    name = parts[i][substr](s + 5);
+                    continue;
                 }
 
                 s = parts[i][indexOf](geometry_id+'=');
@@ -543,7 +549,7 @@ var NecViewer = (function(nv) {
         }
 		//geometry = JSON.stringify(geometry);
         //doc[getElementById](geometry_id)[innerHTML] = geometry;
-		geometry = new nv.AntennaGeometry(geometry_id, max(w - 10, 0), max(h - 10, 0), geometry[0],configurations[length] ? configurations : 0, configurations[length] ? "Configuration": 0);
+		geometry = new nv.AntennaGeometry(geometry_id, max(w - 10, 0), max(h - 10, 0), geometry[0],configurations[length] ? configurations : 0, configurations[length] ? "Configuration": 0, _undefined, name);
 		
     };
 

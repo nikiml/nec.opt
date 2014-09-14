@@ -196,7 +196,7 @@ class NecOutputParser:
 	def getGainSWRChartData(self):
 		res = []
 		for i in self.frequencies:
-			res.append((i.freq, (i.net(),i.swr())))
+			res.append((i.freq, (i.net(),i.swr(), i.gain )))
 		return res
 	def horizontalPattern(self):
 		res = {}

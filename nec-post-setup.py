@@ -74,7 +74,7 @@ def registerBatFile(ext, bat, name):
 	key = wr.CreateKey(key, 'shell')
 	key = wr.CreateKey(key, name)
 	key = wr.CreateKey(key, 'command')
-	wr.SetValue(key, '', wr.REG_SZ, bat+' "%1"')
+	wr.SetValue(key, '', wr.REG_SZ, '"'+bat+'" "%1"')
 	
 def unregisterCommand(ext, name):
 	try:

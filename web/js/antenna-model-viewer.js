@@ -47,7 +47,7 @@ function fontWeight(a) {
     return { "font-weight": a };
 }
 
-nv.AntennaGeometry = function(holder, w, h, geometry, confs_, confs_title, bg) {
+nv.AntennaGeometry = function(holder, w, h, geometry, confs_, confs_title, bg, title) {
     var raphael = Raphael(holder, w, h), 
 		current_geometry = geometry,
 		round = math.round, min = math.min, max = math.max, M = Matrix,
@@ -118,9 +118,9 @@ nv.AntennaGeometry = function(holder, w, h, geometry, confs_, confs_title, bg) {
 			all_colors=[];
 			g[forEach](function(el)
 			{
-				if(el.color in color_filter)return;
+				if(el.color in color_filter) { return; }
 				all_colors.push(el.color);
-				color_filter[el.color]=((el.color in old_color_filter)?old_color_filter[el.color]:1)
+				color_filter[el.color]=((el.color in old_color_filter)?old_color_filter[el.color]:1);
 			});
 		}, 
 		rotateXY = function(x, y, mbtn) {
@@ -179,9 +179,9 @@ nv.AntennaGeometry = function(holder, w, h, geometry, confs_, confs_title, bg) {
 		}, 
 		setButtonCallbacks = function(btn, cl, over, out) {btn[click](cl);btn.mouseover(over); btn.mouseout(out); },
 		makeLabelButton = function(text, width, callback, state, bgcolor, state_color) {
+			state_color = state_color || light_cyan;
 			var st = raphael[set](), rct = raphael[rect](0, 0, width, font_size + 2, 2), 
 				txt = raphael.text(width / 2, font_size / 2 + 1, text)[attr](fontSize(font_size)),
-				state_color = state_color || light_cyan,
 				click = function() { callback(); rct[attr]({ fill: (state && state() ? state_color : bgcolor) }); },
 				over = function() { rct[attr]({ fill: grayc }); txt[attr](fontWeight("bold")); },
 				out = function() { rct[attr]({ fill: (state && state() ? state_color : bgcolor) }); txt[attr](fontWeight("normal")); };
@@ -401,10 +401,10 @@ nv.AntennaGeometry = function(holder, w, h, geometry, confs_, confs_title, bg) {
 			return btn;
 		}, 
 		makeButton = function(bg, decoration,  callback, state, bgcolor, state_color) {
+			state_color = state_color || light_cyan;
 			var _set = raphael[set](), 
-				state_color = state_color || light_cyan,
 				click = function() { callback(); bg[attr]({ fill: (state && state() ? state_color : bgcolor) }); },
-				over = function() { bg[attr]({ fill: state_color!=grayc?grayc:(state && state() ? bgcolor : state_color) }) },
+				over = function() { bg[attr]({ fill: state_color!=grayc?grayc:(state && state() ? bgcolor : state_color) }); },
 				out = function() { bg[attr]({ fill: (state && state() ? state_color : bgcolor) }); };
 
 			
@@ -422,7 +422,7 @@ nv.AntennaGeometry = function(holder, w, h, geometry, confs_, confs_title, bg) {
 		color_filter_btn_set = raphael[set](),
 		drawColorFilterButtons = function(){
 			color_filter_btn_set.remove();
-			if(all_colors.length<2)return;
+			if(all_colors.length<2) { return; }
 			var makeColorButton = function(level, width, color){
 					return makeButton(raphael[rect](1, 1+12*level, 30, 11)[attr]({ stroke: none}), r_line(raphael, [3, 6+12*level], [29, 6+12*level])[attr]({ stroke: color, "stroke-width": width }),
 						function() { color_filter[color] = color_filter[color]?0:1; self[redraw](); },
@@ -577,6 +577,10 @@ nv.AntennaGeometry = function(holder, w, h, geometry, confs_, confs_title, bg) {
     dragRect(1, 1, 40, h - 2, 10, "z", framecolor);
     dragRect(w - 41, 1, w - 2, h - 2, 10, "y", framecolor);
     dragRect(1, h - 42, w - 2, h - 2, 10, "x", framecolor);
+	if(title!==undefined) 
+	{
+		setDragCB(raphael.text(w/2-100, h - 20, title).attr({"font-size":20}),"x");
+	}
 
     drawButtons();
     drawHelpLink();
@@ -616,7 +620,7 @@ nv.AntennaGeometry = function(holder, w, h, geometry, confs_, confs_title, bg) {
 		sorted[1][forEach](function(el) {
 			var s = "M", i = el[1], surf = screen_surfaces[i], len = surf[path][length];
 			color = current_geometry[i].color;
-			if(!color_filter[color])return;
+			if(!color_filter[color]) { return; }
 			color = (surface_selection[i] ? "#f0f" : color);
 			surf[path][forEach](function(el,i){s+=el.e(1)+","+el.e(2)+(i<len-1 ? "L":"z");});
 			surfaces[push](surf = raphael[path](s).attr({stroke:none, fill:color, "fill-opacity": 0.25}));
@@ -628,7 +632,7 @@ nv.AntennaGeometry = function(holder, w, h, geometry, confs_, confs_title, bg) {
 			sorted[0][forEach](function(el) {
 				var i = el[1], j = el[2], l = screen_lines[i][j].line;
 				color = current_geometry[i].color;
-				if(!color_filter[color])return;
+				if(!color_filter[color]) { return; }
                 bg_lines[push](setMouseCallbacks(r_line(raphael,l[0][elements],l[1][elements]),i,j,0));
                 bg_points[push](setMouseCallbacks(raphael[circle](l[0].e(1), l[0].e(2), 8),i,j,1));
                 bg_points[push](setMouseCallbacks(raphael[circle](l[1].e(1), l[1].e(2), 8),i,j,2));
@@ -641,7 +645,7 @@ nv.AntennaGeometry = function(holder, w, h, geometry, confs_, confs_title, bg) {
         sorted[0][forEach](function(el) {
 			var i = el[1], j = el[2], sl = screen_lines[i][j], l = sl[line], seg_len = sl.len;
 			color = current_geometry[i].color;
-			if(!color_filter[color])return;
+			if(!color_filter[color]) { return; }
             bounding_box[0] = vmin(vmin(bounding_box[0], l[0]), l[1]);
             bounding_box[1] = vmax(vmax(bounding_box[1], l[0]), l[1]);
 

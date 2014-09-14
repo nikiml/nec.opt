@@ -593,7 +593,7 @@ class NecEvaluator:
 			self.html_output.addResults("\n".join(res_lines))
 			self.html_output.addNec(self.nec_file_input.parametrizedLines())
 			if not self.options.frequency_data:
-				self.html_output.addGainChart(self.options.sweeps, res)
+				self.html_output.addGainChart(self.options.sweeps, res, self.options.char_impedance)
 			self.html_output.writeToFile(self.options.input+".html")
 				
 

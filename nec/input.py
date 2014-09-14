@@ -5,6 +5,7 @@ from __future__ import division
 import sys, traceback, os, pprint, functools
 from nec import necmath
 from nec.print_out import printOut
+import pdb
 
 nec_cards =["SY","CM","CE","GA","GE","GF","GH","GM","GR","GS","GW","GX","SP","SM","CP","EK","EN","EX","FR","GD","GN","KH","LD","NE","NH","NT","NX","PQ","PT","RP","TL","WG","XQ"]
 
@@ -25,6 +26,7 @@ class NecInputFile:
 		self.dependent_vars = []
 		self.lines=[]
 		self.srclines=[]
+		self.lineno_map = {}
 		self.paramlines={}
 		self.segment_references={}
 		self.autosegment=(0,0)
@@ -308,7 +310,8 @@ class NecInputFile:
 						raise InputError("Extra cards after EN")
 					if neccard == "CE":
 						comments_allowed=0
-				
+			
+				self.lineno_map[i] = len(self.srclines)
 				self.srclines.append(ln.replace(',',' ').split())
 				self.comments.append(comment)
 				srclineno = len(self.srclines)-1
@@ -446,9 +449,12 @@ class NecInputFile:
 				continue
 			if sl[0].strip() in ["GW","GA","GH"]:
 				sline = list(map( self.evalToken , sl[1:]))
-				if self.autosegment[0] and self.tag_data.autoSegment(i):
+				fixed_segmentation = i in self.lineno_map and not self.tag_data.autoSegment(self.lineno_map[i])
+				if self.autosegment[0] and not fixed_segmentation:
 					self.autoSegment(sl[0], sline)
 					sl[2] = str(sline[1])
+				elif fixed_segmentation:
+					sl[2] = sl[2]
 				lines.append(" ".join(sl)+comment)
 
 		#del self.globals

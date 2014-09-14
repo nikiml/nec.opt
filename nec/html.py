@@ -103,7 +103,7 @@ html = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.
 			\n\
 			if (NecViewer.code != code) {\n\
 				NecViewer.code = code;\n\
-				link = NecViewer.extractNecGeometry(code);\n\
+				link = NecViewer.extractNecGeometry(code, "%(model_name)s");\n\
 				nec_model_div.innerHTML = "<object data=\\"" + link + "\\" style=\\"height:100%%; width:100%%;\\"></object>";\n\
 				linktext.value = link;\n\
 				linklink.href = link;\n\
@@ -185,6 +185,7 @@ class HtmlOutput:
 		self.chart_links = []
 		self.nec_code = ""
 		self.eval_results = ""
+		self.model_name = os.path.basename(title)
 	def writeToFile(self, filename):
 		file = open(filename,"wt")
 		file.writelines(html % 
@@ -195,6 +196,7 @@ class HtmlOutput:
 			, "chart_tabs" : "".join(self.chart_tabs)
 			, "startup_code" : "".join(self.h_pattern_script + self.chart_scripts)
 			, "results": self.eval_results
+			, "model_name": self.model_name
 			})
 		file.close()
 		
@@ -217,10 +219,10 @@ class HtmlOutput:
 			if i: self.h_pattern_script.append(","+s)
 			else: self.h_pattern_script.append(s)
 		self.h_pattern_script.append("]];\n")
-		self.h_pattern_script.append("var ptrn = new AntennaHPattern('pattern', Math.min(height,width), pattern_freqs, pattern_model,1, [''],[['#000','#ccc']]);\n")
+		self.h_pattern_script.append("var ptrn = new AntennaHPattern('pattern', Math.min(height,width), pattern_freqs, pattern_model,1, ['%s'],[['#000','#ccc']]);\n"%self.model_name)
 		self.h_pattern_script.append("ptrn.draw();\n")
 		
-	def addGainChart(self, sweeps, gain_swr_data):
+	def addGainChart(self, sweeps, gain_swr_data, char_impedance):
 		gain_swr_data = dict(gain_swr_data)
 		for sweep in sweeps:
 			sweep_title = str(sweep[0])
@@ -231,6 +233,7 @@ class HtmlOutput:
 			sweep_name = "sweep-"+sweep_title
 			freqs = []
 			gains = []
+			raws = []
 			swrs = []
 			for i in range(sweep[2]):
 				freqs.append(sweep[0]+i*sweep[1])
@@ -239,30 +242,33 @@ class HtmlOutput:
 				if m>=0 and m < sweep[2] and abs(f - sweep[0] - m*sweep[1]) < 1.0e-8:
 					gains.append(gain_swr_data[f][0])
 					swrs.append(gain_swr_data[f][1])
+					raws.append(gain_swr_data[f][2])
 			if not freqs or not gains: continue
 
 			gains = list(map(lambda x: round(x,2),gains))
+			raws = list(map(lambda x: round(x,2),raws))
 			swrs = list(map(lambda x: round(x,2),swrs))
 
 			min_gain = math.floor(min(gains))
-			max_gain = math.ceil(max(gains))
+			max_gain = math.ceil(max(raws))
 			min_swr = math.floor(min(swrs))
 			max_swr = math.ceil(max(swrs))
 			min_gain =  min_gain-4-2*(max_swr-1)
 			min_h = max(24*(max_gain-min_gain)+40, 240)
 			self.chart_tabs.append( '<li><a id="%(name)s_tab" href="javascript:showTab(\'%(name)s\')">%(name)s</a></li>\n' %{"name":sweep_name})
 			self.chart_divs.append( '<div class="tab" id="%s" style="height: %dpx; width:80%%"></div>\n'%(sweep_name, min_h))
-			self.chart_links.append( '<div><a href="http://clients.teksavvy.com/~nickm/viewer/c.html?sweep=[%g,%g,%g]&amp;gain=[%s]&amp;swr=[%s]">%s chart viewer link</a></div>\n'%(sweep[0],sweep[1],sweep[2], ("%g,"*len(gains))[0:-1]%tuple(gains), ("%g,"*len(swrs))[0:-1]%tuple(swrs), sweep_name ))
+			self.chart_links.append( '<div><a href="http://clients.teksavvy.com/~nickm/viewer/c.html?title=%s Gain and SWR(%d Ohm)&sweep=[%g,%g,%g]&amp;gain=[%s]&amp;raw=[%s]&amp;swr=[%s]">%s chart viewer link</a></div>\n'%
+				(self.model_name, char_impedance, sweep[0],sweep[1],sweep[2], ("%g,"*len(gains))[0:-1]%tuple(gains), ("%g,"*len(raws))[0:-1]%tuple(raws), ("%g,"*len(swrs))[0:-1]%tuple(swrs), sweep_name ))
 			self.chart_scripts.append('gainChart("%(sweep_name)s", width*.75, %(height)d, %(freqs)s,%(gains)s,%(swrs)s, %(min_gain)d, %(max_gain)d, %(max_swr).1f, "%(title)s");\n' % {
 				'sweep_name':sweep_name,
 				'height': min_h-40,
 				'freqs' : str(freqs),
-				'gains' : str([["%s gain - ave %.2fdBi"%(sweep_title,sum(gains)/len(gains)),"#000"]+gains]),
-				'swrs'  : str([["%s swr"%sweep_title,"#888"]+swrs]),
+				'gains' : str([["%s net gain - ave %.2fdBi"%(sweep_title,sum(gains)/len(gains)),"#000"]+gains, ["%s raw gain - ave %.2fdBi"%(sweep_title,sum(raws)/len(raws)),"#777"]+raws]),
+				'swrs'  : str([["%s swr"%sweep_title,"#aaa"]+swrs]),
 				'min_gain' : int(min_gain),
 				'max_gain' : int(max_gain),
 				'max_swr' : 1+(max_gain-min_gain)/2,
-				'title'   : sweep_title+" Net gain and SWR"
+				'title'   : self.model_name+ " / " + sweep_title+" Net gain and SWR(%d Ohm)"%char_impedance
 				})
 
 
