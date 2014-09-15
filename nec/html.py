@@ -210,7 +210,7 @@ class HtmlOutput:
 		keys = sorted(data.keys())
 		self.h_pattern_script = []
 		if not keys: return
-		self.h_pattern_script.append("var pattern_freqs = %s;\n"%str(keys))
+		self.h_pattern_script.append("var pattern_freqs = %s;\n"%str(list(map(lambda x: str(x)+"MHz", keys))) )
 		self.h_pattern_script.append("var pattern_model = [[\n")
 		for i in range(len(keys)):
 			key = keys[i]
