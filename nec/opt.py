@@ -424,6 +424,9 @@ class NecFileEvaluator:
 						range_results[freqid[0]].add("real", freq.real)
 						range_results[freqid[0]].add("imag", freq.imag)
 						range_results[freqid[0]].add("agt_correction", freq.agt)
+						if self.options.omni:
+							range_results[freqid[0]].add("by_angle_net", [ freq.horizontalRaw(a) - ml for a in sorted(freq.horizontal.keys())] )
+								
 
 #						range_results[freqid[0]].add(gain_diff, swr_diff, f2r_diff)
 				import pprint
@@ -431,11 +434,13 @@ class NecFileEvaluator:
 				d = {"results":[ r.data for r in range_results]}
 				freq_count=0
 				log_keys = ["gain_diff", "net_gain", "raw_gain", "f2r_diff", "f2r", "f2b_diff", "back", "rear", "ml"]
+				exclude_keys = ["by_angle_net"]
 				all_keys = []
 				for i in range(len(self.options.sweeps)):
 					result=range_results[i]
 					c = 0
 					for k in result.data.keys():
+						if k in exclude_keys: continue
 						if k not in all_keys: all_keys.append(k)
 						if k in log_keys:
 							x = math.pow(10, result.max(k)/10)
@@ -634,7 +639,7 @@ def optionParser():
 			options.calc.beam_width = (options.target_function.find("beam_width")!=-1)
 			options.calc.f2r = (options.target_function.find("f2r")!=-1)
 			options.calc.f2b = (options.target_function.find("f2b")!=-1)
-			options.calc.gain = (options.target_function.find("gain")!=-1) or options.calc.f2r or options.calc.f2b or options.calc.beam_width
+			options.calc.gain = (options.target_function.find("gain")!=-1) or options.calc.f2r or options.calc.f2b or options.calc.beam_width or options.omni
 			options.forward = not (options.calc.f2b or options.calc.f2r or options.omni or options.frequency_data or options.calc.beam_width)
 			if not options.quiet: 
 				printOut( "Sweeps set to:" )

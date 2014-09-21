@@ -85,6 +85,7 @@ class NecEvaluator:
 		self.nec_file_input.updateVars(vars, lines[0])
 
 	def parseAgt(self, output):
+		factor = 1 if not self.nec_file_input.has_ground else 2
 		file = open(output, "rt")
 		try : 
 			lines = file.readlines()
@@ -95,7 +96,7 @@ class NecEvaluator:
 		testl = len(tests)
 		while i >0:
 			if lines[i][0:testl]==tests:
-				return float(lines[i][testl+1:].strip().split()[0].lower())
+				return float(lines[i][testl+1:].strip().split()[0].lower())/factor
 			i=i-1
 		raise RuntimeError("Failed to parse AGT result")
 		return 1
@@ -261,7 +262,14 @@ class NecEvaluator:
 		lines = []
 		for line in nec_input_lines:
 			if line[0:2]!="LD":
-				lines.append(line)
+				if line[0:2]!="GN":
+					lines.append(line)
+				else:
+					sl = line.split()
+					if sl[1]!='-1':
+						sl[1]="1"
+						
+					lines.append(" ".join(sl[0:2]))
 			else:
 				sl = line.split()
 				if sl[1]=='5':
@@ -587,7 +595,7 @@ class NecEvaluator:
 		if self.options.html:
 #			if self.options.horizontal_gain:
 			if not self.options.frequency_data:
-				self.html_output.addHPattern(h)
+				self.html_output.addHPattern(self.options.sweeps,h)
 #			else:
 #				self.html_output.addVPattern(v)
 			self.html_output.addResults("\n".join(res_lines))

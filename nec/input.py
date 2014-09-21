@@ -36,6 +36,7 @@ class NecInputFile:
 		self.angle_step = 5
 		self.debug = debug
 		self.input = input
+		self.has_ground = 0
 		self.readSource(self.input)
 
 	def readSource(self, sourcefile):
@@ -170,9 +171,9 @@ class NecInputFile:
 				return 1
 			if self.isEnd():
 				return seg_count
-			if end < 0:
+			if self.end < 0:
 				return min(1+ ceil( self.percent*seg_count),seg_count)
-			if end > 0:
+			if self.end > 0:
 				return 1+ floor( self.percent*seg_count)
 			return round( (self.seg_no-.5)/self.seg_count*seg_count +.5)
 
@@ -338,6 +339,9 @@ class NecInputFile:
 					self.angle_step = self.evalToken(self.srclines[-1][8])
 					if self.angle_step == 0:
 						self.angle_step = 5
+				elif neccard == "GN":
+					if srcline[1] != '-1':
+						self.has_ground = 1
 				elif neccard == "GE":
 					self.tag_data.finalize()
 

@@ -167,6 +167,7 @@ html = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.
 				<div class=""><input style="width:100%%" type="text" id="inlinelinktext"/></div>\n\
 			</div>\n\
 			%(chart_links)s\n\
+			%(pattern_link)s\n\
 		</div>\n\
 	</div>\n\
 	<div><p>Copyright 2013 Nikolay Mladenov. Email: nikolay dot mladenov at gmail dot com</p></div>\n\
@@ -183,6 +184,7 @@ class HtmlOutput:
 		self.chart_tabs = []
 		self.chart_divs = []
 		self.chart_links = []
+		self.pattern_link = ""
 		self.nec_code = ""
 		self.eval_results = ""
 		self.model_name = os.path.basename(title)
@@ -197,6 +199,7 @@ class HtmlOutput:
 			, "startup_code" : "".join(self.h_pattern_script + self.chart_scripts)
 			, "results": self.eval_results
 			, "model_name": self.model_name
+			, "pattern_link": self.pattern_link
 			})
 		file.close()
 		
@@ -206,21 +209,69 @@ class HtmlOutput:
 		self.nec_code = "\n".join(nec)
 	def addVPattern(self, data):
 		pass
-	def addHPattern(self, data):
+	def convertInt(self, i):
+		assert( i>=0 & i < 64)
+		if i < 10 : return chr(ord('0')+i)
+		i-=10
+		if i < 26 : return chr(ord('a')+i)
+		i-=26
+		if i < 26 : return chr(ord('A')+i)
+		i-=26
+		if not i : return '_'
+		return '-'
+		
+	def convertNumber(self, number):
+		assert( number>=0)
+		i = int(number)
+		dec = number - i
+		dec = round(dec/(1./64))
+		if dec == 64:
+			dec = 0
+			i+=1
+		if i > 63 :return "+"
+		return self.convertInt(i)+self.convertInt(dec)
+		
+	def isPatternSymmetric(self, data):
+		for key in data.keys():
+			d = data[key]
+			l = int(len(d)/2)
+			for i in range(1,l):
+				if abs(d[i] - d[-i]) > 1.e-4:
+					return 0
+		return 1
+	def addHPattern(self, sweeps, data):
+		sym = self.isPatternSymmetric(data)
+		pattern_link="chp.html#"
+		pattern_link+="&".join(map(lambda x: "sweep=[%g,%g,%g]"%(x[0],x[1],x[2]), sweeps ) )
+		
 		keys = sorted(data.keys())
 		self.h_pattern_script = []
 		if not keys: return
 		self.h_pattern_script.append("var pattern_freqs = %s;\n"%str(list(map(lambda x: str(x)+"MHz", keys))) )
+		freq_len = 0
 		self.h_pattern_script.append("var pattern_model = [[\n")
 		for i in range(len(keys)):
 			key = keys[i]
-			l = int(len(data[key])/2)+1;
-			s = "["+("%.2f,"*l)[0:-1]%tuple(data[key][0:l])+"]\n"
+			d = data[key]
+			l = int(len(d)/2)+1 if sym else len(d);
+			if not i:
+				freq_len = l
+			s = "["+("%.2f,"*l)[0:-1]%tuple(d[0:l])+"]\n"
 			if i: self.h_pattern_script.append(","+s)
 			else: self.h_pattern_script.append(s)
 		self.h_pattern_script.append("]];\n")
-		self.h_pattern_script.append("var ptrn = new AntennaHPattern('pattern', Math.min(height,width), pattern_freqs, pattern_model,1, ['%s'],[['#000','#ccc']]);\n"%self.model_name)
+		self.h_pattern_script.append("var ptrn = new AntennaHPattern('pattern', Math.min(height,width), pattern_freqs, pattern_model,%d, ['%s'],[['#000','#ccc']]);\n"%(sym,self.model_name))
 		self.h_pattern_script.append("ptrn.draw();\n")
+		sweeps = sorted(sweeps)
+		max_gain = max(map(lambda x: max(data[x]), keys) )
+		pattern_link+="&hpmeta=%g,%d,%d,%s"%(max_gain, freq_len, sym,self.model_name)
+		pattern_link+="&hpdata="
+		for sweep in sweeps:
+			for i in range(sweep[2]):
+				key = sweep[0]+i*sweep[1]
+				d = data[key]
+				pattern_link+="".join(map(lambda x: self.convertNumber(max_gain-x), d[0:freq_len]))
+		self.pattern_link = '<div><a href="http://clients.teksavvy.com/~nickm/viewer/'+pattern_link+'">pattern viewer link</a></div>\n'
 		
 	def addGainChart(self, sweeps, gain_swr_data, char_impedance):
 		gain_swr_data = dict(gain_swr_data)
