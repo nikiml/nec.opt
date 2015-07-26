@@ -45,7 +45,7 @@ def createBatFiles():
 	f.write("%~d1\n")
 	f.write("cd %~p1\n")
 	f.write("set PATH=%PATH%;"+sys.prefix+";"+dir+"engines\n")
-	f.write("for /f \"delims=\" %%x in ('dir /od /b best*.nec') do set last_best=%%x\n")
+	f.write("for /f \"delims=\" %%x in ('dir /od /b best*.nec ^| findstr \.nec$') do set last_best=%%x\n")
 	f.write("python -m nec.eval --param=%1 %last_best%\n")
 	f.write("pause\n")
 	f.close()

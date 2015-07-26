@@ -65,7 +65,7 @@ nv.AntennaGeometry = function(holder, w, h, geometry, confs_, confs_title, bg, t
 		rotate_mode = 0, in_inch = 0, 
 		ie = (getInternetExplorerVersion() !== -1), 
 		bgcolor = bg || "#fff", framecolor = "#f8f8f8", 
-		line_width = 1, point_size = 0, 
+		line_width = 1, point_size = 2, 
 		lenToMM = function(len) { return round(len * 1000) + "mm"; }, 
 		areaToMM = function(area) { return round(area * 10000000)/10 + "mm2"; }, 
 		areaToIN = function(area) { return round(area / 0.00254/ 0.00254)/100 + "in2"; }, 

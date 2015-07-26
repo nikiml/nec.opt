@@ -2,7 +2,7 @@ var chartViewer=function(t,n,e){var r,i,a,g="replace",u="length",f="split",o="in
 for(n=0;n!=r[u];++n)e=+r[n],isNaN(e)&&R("Invalid geometry token "+r[n]),i.push(e)
 return i},N=function(t){var n,e=[".html#",".html?",/%26/g,"&",/%23/g,"",/%22/g,"",/%27/g,"",/%20/g," ",/%5B;/g,"[",/%5D;/g,"]",/&#38;/g,"&",/&#35;/g,"",/&#39;/g,"",/&#34;/g,"",/&#32;/g," ",/&#91;/g,"[",/&#93;/g,"]",/"/g,"",/'/g,"",/#/g,"",/"/g,"",/&quot;/g,"",/&amp;/g,"&",/\[/g,"",/\]/g,""],r=e[u]
 for(n=0;n!=r;n+=2)t=t[g](e[n],e[n+1])
-return t},q=e||N(decodeURI(""+window.location)),A=q[f](/[?&]/),M="Gain and SWR",S=function(t,n){return{f:t,t:n,mt:[],g:[],s:[],r:[]}},W=function(t){var n,e=[]
+return t},q=e||N(decodeURI(""+window.location)),A=q[f](/[?#&]/),M="Gain and SWR",S=function(t,n){return{f:t,t:n,mt:[],g:[],s:[],r:[]}},W=function(t){var n,e=[]
 for(n=0;n!=t[2];++n)e.push(t[0]+n*t[1])
 return e},b=[],x=function(){b[u]||R("sweep or freqs needed before swr")},B=function(t,n){var e,r=0
 for(e=0;e!=t[u];++e)r+=t[e]

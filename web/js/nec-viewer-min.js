@@ -49,6 +49,6 @@ a-=e[n][z]}n!=l&&(i=e[n],i=i.s[C](i.e[_](i.s).x((a-(5!=o?.5:1))/i[z])),e[x](Y[w]
 for(e=0;e!=s;++e)n=t[e][o](","),n[r]&&n[0]in a&&a[n[0]](n,i)
 return i},ne=function(t){var e,n=[".html#",".html?",/%26/g,"&",/%23/g,"",/%22/g,"",/%27/g,"",/%5B;/g,"[",/%5D;/g,"]",/&#38;/g,"&",/&#35;/g,"",/&#39;/g,"",/&#34;/g,"",/&#91;/g,"[",/&#93;/g,"]",/"/g,"",/'/g,"",/#/g,"",/"/g,"",/&quot;/g,"",/&amp;/g,"&"],i=n[r]
 for(e=0;e!=i;e+=2)t=t[g](n[e],n[e+1])
-return t},re=a||ne(decodeURI(""+window.location)),ie=re[o](/[?&]/),oe=e||t.getClientWidth(),se=n||t.getClientHeight(),ae=[],le=[],ce=j
+return t},re=a||ne(decodeURI(""+window.location)),ie=re[o](/[?#&]/),oe=e||t.getClientWidth(),se=n||t.getClientHeight(),ae=[],le=[],ce=j
 try{for(l=1;l<ie[r];++l){if(c=ie[l][m]("message="),-1!=c)return void(H[T](O)[P]=ie[l][v](c+8))
 c=ie[l][m]("name="),-1==c?(c=ie[l][m](O+"="),-1==c?(c=ie[l][m]("conf="),-1==c||(c=ie[l][v](c+5)[o](","),ae[x](1==c[r]?[c[0],[]]:[c[0],+c[1][v](1)]))):le[x](ee(this.decompress(ie[l][v](c+9)[g](/\[\[|\]\]/g,""))[M]()[o](/,(?=[a-z][a-z],|[a-z][a-z]$)/g)))):ce=ie[l][v](c+5)}}catch(ue){return void(H[T](O)[P]=ue)}le=new t.AntennaGeometry(O,N(oe-10,0),N(se-10,0),le[0],ae[r]?ae:0,ae[r]?"Configuration":0,j,ce)},t}(NecViewer||{})

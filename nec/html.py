@@ -104,6 +104,7 @@ html = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.
 			if (NecViewer.code != code) {\n\
 				NecViewer.code = code;\n\
 				link = NecViewer.extractNecGeometry(code, "%(model_name)s");\n\
+				link = link.replace("_g2.html", "_g2.html?id=%(model_name)s");\n\
 				nec_model_div.innerHTML = "<object data=\\"" + link + "\\" style=\\"height:100%%; width:100%%;\\"></object>";\n\
 				linktext.value = link;\n\
 				linklink.href = link;\n\
@@ -210,7 +211,8 @@ class HtmlOutput:
 	def addVPattern(self, data):
 		pass
 	def convertInt(self, i):
-		assert( i>=0 & i < 64)
+		i = int(i)
+		assert( i>=0 and i < 64)
 		if i < 10 : return chr(ord('0')+i)
 		i-=10
 		if i < 26 : return chr(ord('a')+i)
@@ -241,7 +243,7 @@ class HtmlOutput:
 		return 1
 	def addHPattern(self, sweeps, data):
 		sym = self.isPatternSymmetric(data)
-		pattern_link="chp.html#"
+		pattern_link="chp.html?id=%s#"%self.model_name
 		pattern_link+="&".join(map(lambda x: "sweep=[%g,%g,%g]"%(x[0],x[1],x[2]), sweeps ) )
 		
 		keys = sorted(data.keys())
@@ -308,8 +310,8 @@ class HtmlOutput:
 			min_h = max(24*(max_gain-min_gain)+40, 240)
 			self.chart_tabs.append( '<li><a id="%(name)s_tab" href="javascript:showTab(\'%(name)s\')">%(name)s</a></li>\n' %{"name":sweep_name})
 			self.chart_divs.append( '<div class="tab" id="%s" style="height: %dpx; width:80%%"></div>\n'%(sweep_name, min_h))
-			self.chart_links.append( '<div><a href="http://clients.teksavvy.com/~nickm/viewer/c.html?title=%s Gain and SWR(%d Ohm)&sweep=[%g,%g,%g]&amp;gain=[%s]&amp;raw=[%s]&amp;swr=[%s]">%s chart viewer link</a></div>\n'%
-				(self.model_name, char_impedance, sweep[0],sweep[1],sweep[2], ("%g,"*len(gains))[0:-1]%tuple(gains), ("%g,"*len(raws))[0:-1]%tuple(raws), ("%g,"*len(swrs))[0:-1]%tuple(swrs), sweep_name ))
+			self.chart_links.append( '<div><a href="http://clients.teksavvy.com/~nickm/viewer/c.html?id=%s#title=%s Gain and SWR(%d Ohm)&sweep=[%g,%g,%g]&amp;gain=[%s]&amp;raw=[%s]&amp;swr=[%s]">%s chart viewer link</a></div>\n'%
+				(self.model_name, self.model_name, char_impedance, sweep[0],sweep[1],sweep[2], ("%g,"*len(gains))[0:-1]%tuple(gains), ("%g,"*len(raws))[0:-1]%tuple(raws), ("%g,"*len(swrs))[0:-1]%tuple(swrs), sweep_name ))
 			self.chart_scripts.append('gainChart("%(sweep_name)s", width*.75, %(height)d, %(freqs)s,%(gains)s,%(swrs)s, %(min_gain)d, %(max_gain)d, %(max_swr).1f, "%(title)s");\n' % {
 				'sweep_name':sweep_name,
 				'height': min_h-40,

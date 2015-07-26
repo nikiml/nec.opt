@@ -509,7 +509,7 @@ var NecViewer = (function(nv) {
 	    return s;
 	},
 	loc = loca || cleanupURL(decodeURI(window.location.toString())),
-	parts = loc[split](/[?&]/),	i, s, 
+	parts = loc[split](/[?#&]/),	i, s, 
 	w = rwidth || nv.getClientWidth(), h = rheight || nv.getClientHeight(),
 	configurations = [], geometry = [], name=_undefined;
         try {

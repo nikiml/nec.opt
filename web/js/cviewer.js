@@ -47,7 +47,7 @@ cleanupURL = function(s)
 	return s;
 },
 	loc = loca || cleanupURL(decodeURI(window.location.toString())),
-	parts = loc[split](/[?&]/),
+	parts = loc[split](/[?#&]/),
 	title="Gain and SWR",s,g,i, 
 	newChart = function(freqs,ttl){ return {f:freqs, t:ttl, mt:[], g:[], s:[], r:[]}; }, 
 	expandSweep = function(s){var freqs=[],i; for(i = 0; i!=s[2]; ++i){freqs.push(s[0]+i*s[1]);}return freqs;}, 
