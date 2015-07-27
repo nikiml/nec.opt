@@ -2,6 +2,7 @@ setup.py
 nec_eval.sh
 nec_opt.sh
 nec_restart_gen.sh
+nec-post-setup.py
 nec/demathutils.py
 nec/process_monitor.py
 nec/differential_evolution.py

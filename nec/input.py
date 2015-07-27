@@ -416,6 +416,7 @@ class NecInputFile:
 		finally: file.close()
 	
 	def evalToken(self, x):
+		x = x.replace("^","**")
 		return eval(x, necmath.__dict__,self.globals)
 
 	def updateGlobalVars(self):

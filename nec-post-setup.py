@@ -1,5 +1,4 @@
-import winreg as wr
-import sys
+import sys,os
 
 def fileCreate(file):
 	try:
@@ -63,6 +62,7 @@ def createBatFiles():
 	
 
 def registerBatFile(ext, bat, name):
+	import winreg as wr
 	ext_key = wr.CreateKey(wr.HKEY_CLASSES_ROOT, '.'+ext)
 	try:
 		auto_file = wr.EnumValue(ext_key,0)[1]
@@ -77,6 +77,7 @@ def registerBatFile(ext, bat, name):
 	wr.SetValue(key, '', wr.REG_SZ, '"'+bat+'" "%1"')
 	
 def unregisterCommand(ext, name):
+	import winreg as wr
 	try:
 		ext_key = wr.OpenKey(wr.HKEY_CLASSES_ROOT, '.'+ext)
 	except: return
@@ -111,9 +112,10 @@ def remove():
 	unregisterCommand('opt_log', 'Show evolution history')
 	unregisterCommand('nec_sym', 'Evaluate with params')
 
-	
-if sys.argv[1]== '-install':
-	install()
-elif sys.argv[1]== '-remove':
-	remove()
+
+if os.name == 'nt':	
+	if sys.argv[1]== '-install':
+		install()
+	elif sys.argv[1]== '-remove':
+		remove()
 
