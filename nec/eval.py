@@ -216,13 +216,13 @@ class NecEvaluator:
 							L = 2e-7 * (diel * R/r)**(1.0/12) * (1 - 1/diel) * necmath.log(R/r)
 							lines[-1]="LD 5 %d %d %d 0 %s "%(i2, i3, i4, fn(L))
 						else:
-						    vals=[ln[1]]
+							vals=[ln[1]]
 							for i in range(2,len(ln)):
 								if i < 5:
 									vals.append(int(ev(ln[i])));
 								else:
 									vals.append(fn(ev(ln[i])));
-							lines[-1]="LD " + ("{} "*(len(vals)).format(*vals)
+							lines[-1]="LD " + ("{} "*len(vals)).format(*vals)
 				else:
 					sline = list(map( ev , ln[1:]))
 					sline[0] =int(sline[0])
