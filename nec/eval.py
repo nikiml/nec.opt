@@ -619,7 +619,7 @@ class NecEvaluator:
 			self.html_output.addNec(self.nec_file_input.parametrizedLines())
 			if not self.options.frequency_data:
 				self.html_output.addGainChart(self.options.sweeps, res, self.options.char_impedance)
-			self.html_output.writeToFile(self.options.input+".html")
+			self.html_output.writeToFile(self.options.input+".html", self.options.publish)
 				
 
 
@@ -687,6 +687,7 @@ def optionParser():
 			self.add_option("--chart", default=0, action="store_true", help="IGNORED")
 			self.add_option("--js-model", default=0, action="store_true", help="IGNORED")
 			self.add_option("--html", default=1, type="int", help="output html file, set to 0 to disable")
+			self.add_option("--publish", default=False, action="store_true", help="output html file using http://clients.teksavvy.com/~nickm for resources")
 		def parse_args(self, extra_args=[]):
 			options, args = OptionParser.parse_args(self,extra_args)
 			class Calc: pass

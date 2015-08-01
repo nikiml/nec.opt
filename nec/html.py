@@ -24,6 +24,8 @@ blueprint_ie_url = "/blueprint/ie.css"
 custom_css_url = "/custom.css"
 menu_url = "/js/menu.js"
 
+website_link_base_publish = "http://clients.teksavvy.com/~nickm/"
+
 #website_link_base = "http://clients.teksavvy.com/~nickm/antenna-api/"
 #antenna_min_url = "antenna-min.js"
 #gline_min_url = "g.line-min.js"
@@ -39,7 +41,8 @@ menu_url = "/js/menu.js"
 #custom_css_url = "../custom.css"
 #menu_url = "../js/menu.js"
 
-html = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">\n\
+def html (website_link_base):
+	return  '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">\n\
 <html xmlns="http://www.w3.org/1999/xhtml">\n\
 <head>\n\
 	<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>\n\
@@ -60,11 +63,11 @@ html = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.
 	<script src="'+website_link_base+sylvester_min_url+'" type="text/javascript" charset="utf-8"></script>\n\
 	<script src="'+website_link_base+antenna_min_url+'" type="text/javascript" charset="utf-8"></script>\n\
 	<script src="'+website_link_base+menu_url+'" type="text/javascript" charset="utf-8"></script>\n\
-    \n\
+	\n\
 	<script type="text/javascript" charset="utf-8">\n\
 		NecViewer = {code:"",embeded:1}\n\
 	</script>\n\
-  	<script src="'+website_link_base+antenna_model_viewer_min+'" type="text/javascript" charset="utf-8"></script>\n\
+	<script src="'+website_link_base+antenna_model_viewer_min+'" type="text/javascript" charset="utf-8"></script>\n\
 	<script src="'+website_link_base+nec2_code_viewer_url+'" type="text/javascript" charset="utf-8"></script>\n\
 	<script type="text/javascript" charset="utf-8">\n\
 		var height = NecViewer.getClientHeight()-100,  width = NecViewer.getClientWidth()-250;\n\
@@ -189,9 +192,9 @@ class HtmlOutput:
 		self.nec_code = ""
 		self.eval_results = ""
 		self.model_name = os.path.basename(title)
-	def writeToFile(self, filename):
+	def writeToFile(self, filename, publish):
 		file = open(filename,"wt")
-		file.writelines(html % 
+		file.writelines(html(website_link_base_publish if publish else website_link_base) % 
 			{"title":self.title
 			,"nec_code":self.nec_code
 			, "chart_links" : "".join(self.chart_links)
