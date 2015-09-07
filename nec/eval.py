@@ -96,7 +96,10 @@ class NecEvaluator:
 		testl = len(tests)
 		while i >0:
 			if lines[i][0:testl]==tests:
-				return float(lines[i][testl+1:].strip().split()[0].lower())/factor
+				agt = float(lines[i][testl+1:].strip().split()[0].lower())/factor
+				if agt <=0 :
+					raise ValueError("Invalid AGT value in output: %.4f"%agt)
+				return agt
 			i=i-1
 		raise RuntimeError("Failed to parse AGT result")
 		return 1

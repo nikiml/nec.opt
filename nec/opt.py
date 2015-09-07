@@ -359,6 +359,7 @@ class NecFileEvaluator:
 				if self.options.verbose: printOut("done")
 			except:
 				if self.options.verbose: printOut("failed")
+			if self.options.stop_on_error:sys.exit(1)
 		else:
 			#agts = [1.0]*len(results)
 
@@ -497,6 +498,7 @@ class NecFileEvaluator:
 			except:
 				if not self.options.verbose: sys.stderr.write('\n')
 				traceback.print_exc()
+				if self.options.stop_on_error:sys.exit(1)
 				res = -1000
 		if res == -1000:
 			res = 1000.0
@@ -585,6 +587,7 @@ def optionParser():
 			self.add_option("--strict-max-target", default=False, action="store_true", help="use if your target function has no averaging i.e. if the result for a single frequency can be used to declare a model as worse in comparison with the score of another model. The default target function max(max_swr_diff,max_gain_diff) is an example of such function. Setting this option will speed up the optimization, but it has to be used correctly.")
 			self.add_option("--profile", default=False, action="store_true")
 			self.add_option("--engine-kill-time", type="int", default=3600, help="Maximum time the nec engine is allowed to run before it is considered hanging and killed. After 100 successful engine invocations this value is updated with 10x the actual maximum running time of all previous engine invocations")
+			self.add_option("--stop-on-error", default=False, action="store_true")
 
 		def convertToListOfLists(self, _list, size=None, default=None):
 			if size is not None and len(_list) < size:
