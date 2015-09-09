@@ -318,20 +318,39 @@ class NecEvaluator:
 			if self.process_monitor:
 				self.process_monitor.removeProcess(popen)
 	
-	def runSweep(self, nec_input_lines, sweep, get_agt_scores=0, use_agt = None, id=""):
+	def runSweep(self, nec_input_lines, sweep, get_agt_scores, use_agt, id, number):
 		#print "Get agt score = %d"%get_agt_scores
 		#import tempfile as tmp
 		import subprocess as sp
 		import os
+		wd = self.options.output
 		try:
-			os.mkdir(self.options.output)
+			os.mkdir(wd)
 		except : pass
-			
-		nec_input = os.path.join(".",self.options.output,"nec2_"+id+".inp")
+		wd = os.path.join(wd, "cwd")
+		try:
+			os.mkdir(wd)
+		except : pass
+		wd = os.path.join(wd, str(number))
+		try:
+			os.mkdir(wd)
+		except : pass
+		id=id+'_'+str(number)
+		
+		nec_input = "nec2_"+id+".inp"
 		agt_input = nec_input[0:-3]+"agt"
+		nec_output = nec_input[0:-3]+"out"
+		exe_input = os.path.join(wd, nec_input[0:-3]+"cin")
+		engine_nec_input=os.path.join("..","..",nec_input)
+		engine_agt_input=os.path.join("..","..",agt_input)
+		engine_nec_output=os.path.join("..","..",nec_output)
+		nec_input=os.path.join(self.options.output,nec_input)
+		agt_input=os.path.join(self.options.output,agt_input)
+		nec_output=os.path.join(self.options.output,nec_output)
+
 		nec_input_lines, segments = nec_input_lines
 
-		file = open(nec_input, "wt")
+		file = open(nec_input, "wt") #".",
 		fslines = self.freqSweepLines(nec_input_lines,sweep)
 		if not fslines:
 			return ()
@@ -339,58 +358,56 @@ class NecEvaluator:
 			file.write("\n".join(fslines)+"\n")
 		finally: file.close()
 		if (self.options.agt_correction or get_agt_scores) and (use_agt is None):
-			file = open(agt_input, "wt")
+			file = open(agt_input, "wt") #".",
 			try: 
 				file.write("\n".join(self.agtLines(nec_input_lines,sweep))+"\n")
 			finally: file.close()
 		
-		nec_output = nec_input[0:-3]+"out"
-		exe_input = nec_input[0:-3]+"cin"
 		agt = 1.0
 		engine = chooseEngine(self.options.engine, segments)
 		if use_agt is not None:
 			agt = use_agt
 		elif self.options.agt_correction or get_agt_scores :
 			if self.options.engine_takes_cmd_args:
-				self.handlePopen(sp.Popen([engine, agt_input, nec_output] ))
+				self.handlePopen(sp.Popen([engine, engine_agt_input, engine_nec_output], cwd=wd))
 			else:
 				try:
 					f = open(exe_input,"wt")
-					f.write(agt_input)
+					f.write(engine_agt_input)
 					f.write("\n")
-					f.write(nec_output)
+					f.write(engine_nec_output)
 					f.write("\n")
 					f.close()
 					f = open(exe_input)
-					self.handlePopen(sp.Popen(engine, stdin=f, stdout=open(os.devnull, "w")))
+					self.handlePopen(sp.Popen(engine, stdin=f, stdout=open(os.devnull, "w"), cwd=wd))
 				finally:
 					f.close()
 			agt = self.parseAgt(nec_output)
 			if get_agt_scores:
 				return (nec_output,agt)
 		if self.options.engine_takes_cmd_args:
-			self.handlePopen(sp.Popen([engine, nec_input, nec_output] ))
+			self.handlePopen(sp.Popen([engine, engine_nec_input, engine_nec_output], cwd=wd))
 		else:
 			try:
 				f = open(exe_input,"wt")
-				f.write(nec_input)
+				f.write(engine_nec_input)
 				f.write("\n")
-				f.write(nec_output)
+				f.write(engine_nec_output)
 				f.write("\n")
 				f.close()
 				f = open(exe_input)
-				self.handlePopen(sp.Popen(engine, stdin=f, stdout=open(os.devnull, "w")))
+				self.handlePopen(sp.Popen(engine, stdin=f, stdout=open(os.devnull, "w"), cwd=wd))
 			finally:
 				f.close()
 		return (nec_output,agt)
 		
-	def runSweepT(self, nec_input_lines, sweep, number, result_map, result_lock, get_agt_scores=0, use_agt = None, id=0 ):
+	def runSweepT(self, nec_input_lines, sweep, number, result_map, result_lock, get_agt_scores, use_agt, id ):
 		r = None
 		try:
 			ua = None
 			if use_agt and number in use_agt:
 				ua = use_agt[number]
-			r = self.runSweep(nec_input_lines,sweep, get_agt_scores,ua, str(id)+"_"+str(number))
+			r = self.runSweep(nec_input_lines,sweep, get_agt_scores,ua, str(id), number)
 		except KeyboardInterrupt:
 			raise
 		except:
@@ -569,7 +586,7 @@ class NecEvaluator:
 			ua = None
 			if use_agt and number in use_agt:
 				ua = use_agt[number]
-			r = self.runSweep(nec_input_lines,sweep, get_agt_scores,ua, str(id)+"_"+str(number))
+			r = self.runSweep(nec_input_lines,sweep, get_agt_scores,ua, str(id), number)
 		except KeyboardInterrupt:
 			raise
 		except:

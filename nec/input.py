@@ -7,7 +7,7 @@ from nec import necmath
 from nec.print_out import printOut
 import pdb
 
-nec_cards =["SY","CM","CE","GA","GE","GF","GH","GM","GR","GS","GW","GX","SP","SM","CP","EK","EN","EX","FR","GD","GN","KH","LD","NE","NH","NT","NX","PQ","PT","RP","TL","WG","XQ"]
+nec_cards =["SY","CM","CE","GA","GE","GF","GH","GM","GR","GS","GW","GX","SP","SM","SC","CP","EK","EN","EX","FR","GD","GN","KH","LD","NE","NH","NT","NX","PQ","PT","RP","TL","WG","XQ"]
 
 class InputError(RuntimeError):
 	def __init__(self, msg):
