@@ -164,9 +164,9 @@ class NecInputFile:
 				if not end :
 					return int((seg_count+1)/2)
 				elif end < 0:
-					return int(seg_cout/2 +1)
+					return int(seg_count/2 +1)
 				else:
-					return int(seg_cout/2 )
+					return int(seg_count/2 )
 			if self.isStart():
 				return 1
 			if self.isEnd():
@@ -319,20 +319,23 @@ class NecInputFile:
 				srcline = self.srclines[srclineno]
 				if neccard in ["GW","GA","GH"]:
 					self.tag_data.addWire(srcline, srclineno)
-				if neccard=="GM" or neccard=="GR" or neccard=="GX":
+				elif neccard=="GM" or neccard=="GR" or neccard=="GX":
 					self.tag_data.addTransformation(srcline)
-				if neccard=="EX":
+				elif neccard=="EX":
 					self.parseEXLine(srcline,srclineno, i)
-				if neccard=="TL" or neccard=="NT":
+				elif neccard=="TL" or neccard=="NT":
 					self.parseNTOrTLLine(srcline,srclineno, i)
-				if neccard=="LD":
+				elif neccard=="LD":
 					self.parseLDLine(srcline,srclineno, i)
 				elif neccard == "FR":
+					if len(srcline) < 6:
+						raise RuntimeError('Invalid FR card: "%s\"'%ln)
 					if not self.sweeps : 
-						self.frequency = self.evalToken(self.srclines[-1][5])
+						self.frequency = self.evalToken(srcline[5])
 					else:
-						self.frequency = max(self.evalToken(self.srclines[-1][5]), self.frequency)
-					self.sweeps.append((self.evalToken(self.srclines[-1][5]), self.evalToken(self.srclines[-1][6]), max(1,self.evalToken(self.srclines[-1][2]))) )
+						self.frequency = max(self.evalToken(srcline[5]), self.frequency)
+					fr_step = self.evalToken(srcline[6]) if len(srcline)>6 else 0
+					self.sweeps.append((self.evalToken(srcline[5]), fr_step, max(1,self.evalToken(srcline[2]))) )
 				elif neccard == "GS":
 					self.scale = self.evalToken(self.srclines[-1][3])
 				elif neccard == "RP":
@@ -359,7 +362,7 @@ class NecInputFile:
 			start_perimeter = 2*necmath.pi*necmath.sqrt( (line[4]*line[4]+line[5]*line[5])/2 )
 			end_perimeter = 2*necmath.pi*necmath.sqrt( (line[6]*line[6]+line[7]*line[7])/2 )
 			average_perimeter = (start_perimeter+end_perimeter)/2
-			return sqrt(average_perimeter*turns * average_perimeter*turns + line[3]*line[3])
+			return necmath.sqrt(average_perimeter*turns * average_perimeter*turns + line[3]*line[3])
 
 
 	def autoSegment(self, type, line):

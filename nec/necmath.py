@@ -1,5 +1,7 @@
 from __future__ import division
 from math import *
+PI=pi
+Pi=pi
 def sgn(a):
 	if a < 0: return -1
 	if a >0: return 1

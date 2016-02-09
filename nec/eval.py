@@ -78,7 +78,7 @@ class NecEvaluator:
 			f.close()
 		except:
 			raise
-		if len(lines)<2: raise  InputError("invalid Parametes files")
+		if len(lines)<2: raise  InputError("invalid Parameters files")
 		vars = lines[0].split()
 		del lines[0]
 		lines[0] = list(map(float, lines[0].split()))
