@@ -426,8 +426,15 @@ class NecFileEvaluator:
 						range_results[freqid[0]].add("imag", freq.imag)
 						range_results[freqid[0]].add("agt_correction", freq.agt)
 						if self.options.omni:
-							range_results[freqid[0]].add("by_angle_net", [ freq.horizontalRaw(a) - ml for a in sorted(freq.horizontal.keys())] )
-								
+							by_angle_net = [ freq.horizontalRaw(a) - ml for a in sorted(freq.horizontal.keys())]
+							by_angle_gain_diff = [ tl - (freq.horizontalRaw(a) - ml) for a in sorted(freq.horizontal.keys())] 
+							range_results[freqid[0]].add("by_angle_net", by_angle_net )
+							range_results[freqid[0]].add("by_angle_gain_diff", by_angle_gain_diff )
+							range_results[freqid[0]].add("omni_net", min(by_angle_net) )
+							range_results[freqid[0]].add("omni_gain_diff", max(by_angle_gain_diff) )
+							range_results[freqid[0]].add("around_net", sum(by_angle_net)/max(1,len(by_angle_net)) )
+							range_results[freqid[0]].add("around_gain_diff", sum(by_angle_gain_diff)/max(1,len(by_angle_gain_diff)) )
+							
 
 #						range_results[freqid[0]].add(gain_diff, swr_diff, f2r_diff)
 				import pprint
@@ -435,7 +442,7 @@ class NecFileEvaluator:
 				d = {"results":[ r.data for r in range_results]}
 				freq_count=0
 				log_keys = ["gain_diff", "net_gain", "raw_gain", "f2r_diff", "f2r", "f2b_diff", "back", "rear", "ml"]
-				exclude_keys = ["by_angle_net"]
+				exclude_keys = ["by_angle_net", "by_angle_gain_diff"]
 				all_keys = []
 				for i in range(len(self.options.sweeps)):
 					result=range_results[i]
