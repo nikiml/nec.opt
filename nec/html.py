@@ -1,13 +1,13 @@
 from __future__ import division
 import math, os
 
-gdrive_link_base = "https://drive.google.com/uc?id="#confirm=no_antivirus&id="
+#gdrive_link_base = "https://drive.google.com/uc?id="#confirm=no_antivirus&id="
 
-antenna_min_code = "0B4XLhzD2JVjBWkY0bXU4UUNKNXc"
-gline_min_code = "0B4XLhzD2JVjBdXdla09IMGxsTUU"
-graphael_min_code = "0B4XLhzD2JVjBSU9zMllJTWhLeDA"
-raphael_min_code = "0B4XLhzD2JVjBc0JpcWtoMXVGSGc"
-sylvester_min_code = "0B4XLhzD2JVjBck9vMExqSk1VM3M"
+#antenna_min_code = "0B4XLhzD2JVjBWkY0bXU4UUNKNXc"
+#gline_min_code = "0B4XLhzD2JVjBdXdla09IMGxsTUU"
+#graphael_min_code = "0B4XLhzD2JVjBSU9zMllJTWhLeDA"
+#raphael_min_code = "0B4XLhzD2JVjBc0JpcWtoMXVGSGc"
+#sylvester_min_code = "0B4XLhzD2JVjBck9vMExqSk1VM3M"
 
 website_link_base = "file:///"+os.path.join(os.path.dirname(__file__), "html").replace(os.sep,"/")
 antenna_min_url = "/js/antenna-min.js"
@@ -24,7 +24,7 @@ blueprint_ie_url = "/blueprint/ie.css"
 custom_css_url = "/custom.css"
 menu_url = "/js/menu.js"
 
-website_link_base_publish = "http://clients.teksavvy.com/~nickm/"
+website_link_base_publish = "http://mladenov.com/~nickm/"
 
 #website_link_base = "http://clients.teksavvy.com/~nickm/antenna-api/"
 #antenna_min_url = "antenna-min.js"

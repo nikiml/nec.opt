@@ -1,0 +1,2 @@
+opt.bat and eval.bat will add this folder to the PATH so if engines are found here they will be used.
+if the engines nec2dxs500.exe, ..., nec2dxs11k.exe are found here during distribution build for windows they will be included(see MANIFEST.win)
