@@ -162,7 +162,7 @@ var NecViewer = (function(nv){
 
 	nv[extractNecGeometry] = nv[extractNecGeometry] || function(nec, title) {
 	    var toRad = function(a) { return a * M.PI / 180; }, toDeg = function(a) { return a * 180 / M.PI; }, 
-			base_link = "http://clients.teksavvy.com/~nickm/viewer/_g2.html#", 
+			base_link = "http://mladenov.ca/~nickm/viewer/_g2.html#", 
 			res = "", msg = base_link + "message=", failed = msg+"failed_to_", 
 			round = M.round, mm_unit_scale = hundred_thousant, 
 			roundToken = function(token){ return round(token*mm_unit_scale)/mm_unit_scale; }, 

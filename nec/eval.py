@@ -707,7 +707,7 @@ def optionParser():
 			self.add_option("--chart", default=0, action="store_true", help="IGNORED")
 			self.add_option("--js-model", default=0, action="store_true", help="IGNORED")
 			self.add_option("--html", default=1, type="int", help="output html file, set to 0 to disable")
-			self.add_option("--publish", default=False, action="store_true", help="output html file using http://clients.teksavvy.com/~nickm for resources")
+			self.add_option("--publish", default=False, action="store_true", help="output html file using http://mladenov.ca/~nickm for resources")
 		def parse_args(self, extra_args=[]):
 			options, args = OptionParser.parse_args(self,extra_args)
 			class Calc: pass

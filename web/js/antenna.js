@@ -325,7 +325,7 @@ var antennaGeometry = function(holder, w, h, scale, coords, ini_x_off_, ini_y_of
    drawHelpLink = function() {
         //        alert("drawHelpLink");
         //help_set = raphael.set();
-        //        var url = "http://clients.teksavvy.com/~nickm/help.html";
+        //        var url = "http://mladenov.ca/~nickm/help.html";
         //        rct = raphael.rect(w - 30, 1, 30, 12, 2);
         //        rct.attr({ fill: framecolor, stroke: none });
         //        rct.click(function() { window.open(url) })
@@ -337,7 +337,7 @@ var antennaGeometry = function(holder, w, h, scale, coords, ini_x_off_, ini_y_of
         //        txt.mouseout(function() { rct.attr({ fill: framecolor }); this.attr(fontWeight("normal")); });
         //        help_set.push(rct);
         //        help_set.push(txt);
-        help_set = makeLabel("Help", 30, 11, function() { window.open("http://clients.teksavvy.com/~nickm/help.html"); }, 0, framecolor);
+        help_set = makeLabel("Help", 30, 11, function() { window.open("http://mladenov.ca/~nickm/help.html"); }, 0, framecolor);
         help_set.translate(w - 30, 0);
     }, 
    drawConfigurations = function() {

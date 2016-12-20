@@ -196,7 +196,7 @@ nv.AntennaGeometry = function(holder, w, h, geometry, confs_, confs_title, bg, t
 			return st;
 		}, 
 		drawHelpLink = function() {
-			help_set = makeLabelButton("Help", 30, function() { window.open("http://clients.teksavvy.com/~nickm/help.html"); }, 0, framecolor);
+			help_set = makeLabelButton("Help", 30, function() { window.open("http://mladenov.ca/~nickm/help.html"); }, 0, framecolor);
 			help_set[translate](w - 30, 0);
 		}, 
 		drawConfigurations = function() {

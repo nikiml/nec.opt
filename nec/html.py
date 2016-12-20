@@ -26,7 +26,7 @@ menu_url = "/js/menu.js"
 
 website_link_base_publish = "http://mladenov.com/~nickm/"
 
-#website_link_base = "http://clients.teksavvy.com/~nickm/antenna-api/"
+#website_link_base = "http://mladenov.ca/~nickm/antenna-api/"
 #antenna_min_url = "antenna-min.js"
 #gline_min_url = "g.line-min.js"
 #graphael_min_url = "g.raphael-min.js"
@@ -124,7 +124,7 @@ def html (website_link_base):
 	<script type="text/javascript" charset="utf-8">\n\
 		window.onload = function() \n\
 		{\n\
-			createMenu("eval_viewer", "http://clients.teksavvy.com/~nickm/", 1);\n\
+			createMenu("eval_viewer", "http://mladenov.ca/~nickm/", 1);\n\
 			var i, divs = document.getElementsByTagName("div");\n\
 			for(i=0; i!=divs.length; ++i)\n\
 				if (divs[i].className !="tab")\n\
@@ -276,7 +276,7 @@ class HtmlOutput:
 				key = sweep[0]+i*sweep[1]
 				d = data[key]
 				pattern_link+="".join(map(lambda x: self.convertNumber(max_gain-x), d[0:freq_len]))
-		self.pattern_link = '<div><a href="http://clients.teksavvy.com/~nickm/viewer/'+pattern_link+'">pattern viewer link</a></div>\n'
+		self.pattern_link = '<div><a href="http://mladenov.ca/~nickm/viewer/'+pattern_link+'">pattern viewer link</a></div>\n'
 		
 	def addGainChart(self, sweeps, gain_swr_data, char_impedance):
 		gain_swr_data = dict(gain_swr_data)
@@ -313,7 +313,7 @@ class HtmlOutput:
 			min_h = max(24*(max_gain-min_gain)+40, 240)
 			self.chart_tabs.append( '<li><a id="%(name)s_tab" href="javascript:showTab(\'%(name)s\')">%(name)s</a></li>\n' %{"name":sweep_name})
 			self.chart_divs.append( '<div class="tab" id="%s" style="height: %dpx; width:80%%"></div>\n'%(sweep_name, min_h))
-			self.chart_links.append( '<div><a href="http://clients.teksavvy.com/~nickm/viewer/c.html?id=%s#title=%s Gain and SWR(%d Ohm)&sweep=[%g,%g,%g]&amp;gain=[%s]&amp;raw=[%s]&amp;swr=[%s]">%s chart viewer link</a></div>\n'%
+			self.chart_links.append( '<div><a href="http://mladenov.ca/~nickm/viewer/c.html?id=%s#title=%s Gain and SWR(%d Ohm)&sweep=[%g,%g,%g]&amp;gain=[%s]&amp;raw=[%s]&amp;swr=[%s]">%s chart viewer link</a></div>\n'%
 				(self.model_name, self.model_name, char_impedance, sweep[0],sweep[1],sweep[2], ("%g,"*len(gains))[0:-1]%tuple(gains), ("%g,"*len(raws))[0:-1]%tuple(raws), ("%g,"*len(swrs))[0:-1]%tuple(swrs), sweep_name ))
 			self.chart_scripts.append('gainChart("%(sweep_name)s", width*.75, %(height)d, %(freqs)s,%(gains)s,%(swrs)s, %(min_gain)d, %(max_gain)d, %(max_swr).1f, "%(title)s");\n' % {
 				'sweep_name':sweep_name,
