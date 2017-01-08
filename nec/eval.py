@@ -323,19 +323,19 @@ class NecEvaluator:
 	def runEngine(self, engine, nec_input, nec_output, engine_cin, wd):
 		import subprocess as sp
 		if self.options.engine_takes_cmd_args:
-			if engine == "nec2c":
+			if engine == "nec2c" or engine == "nec2++":
 				self.handlePopen(sp.Popen([engine, "-i", nec_input, "-o", nec_output], cwd=wd))
 			else:
 				self.handlePopen(sp.Popen([engine, nec_input, nec_output], cwd=wd))
 		else:
 			try:
-				f = open(exe_input,"wt")
+				f = open(engine_cin,"wt")
 				f.write(nec_input)
 				f.write("\n")
-				f.write(ec_output)
+				f.write(nec_output)
 				f.write("\n")
 				f.close()
-				f = open(exe_input)
+				f = open(engine_cin)
 				self.handlePopen(sp.Popen(engine, stdin=f, stdout=open(os.devnull, "w"), cwd=wd))
 			finally:
 				f.close()

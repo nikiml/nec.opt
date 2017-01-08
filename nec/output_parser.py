@@ -245,10 +245,15 @@ class NecOutputParser:
 			elif input_params_re.match(ln):
 				if not len(lines[i+1].strip()): i+=1
 				i+=3
-				real = float(lines[i][60:72]) # at least one linux engine has calculated negative real impedance...
+				splits = lines[i].strip().split()
+				if len(splits) == 11:
+					real = float(splits[6])
+					imag = float(splits[7])
+				else:
+					real = float(lines[i][60:72]) # at least one linux engine has calculated negative real impedance...
+					imag = float(lines[i][72:84])
 				if real <= 0:
 					raise ValueError("engine reported invalid real impedance %.4f for frequency %.1f"%(real,freq) )
-				imag = float(lines[i][72:84])
 #				self.frequencies[-1].real = float(lines[i][60:72])
 #				self.frequencies[-1].imag = float(lines[i][72:84])
 				fd = FrequencyData(self.options.char_impedance)
