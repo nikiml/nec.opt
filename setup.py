@@ -1,6 +1,7 @@
 from distutils.core import setup
+from version import git_commit_sha
 setup(name='nec',
-      version='0.16.134',
+      version='0.17.'+git_commit_sha,
       author='Nikolay Mladenov',
       author_email='Nikolay dot Mladenov at gmail dot com',
       packages=['nec'],
