@@ -222,16 +222,29 @@ class NecOutputParser:
 		freq = 0
 		real = 0
 		imag = 0
+		import re
+		class Re:
+			def __init__(self, pattern):
+				self.re = re.compile(pattern)
+				self.res = None
+			def match(self, space):
+				self.res = self.re.match(space)
+				return self.res
+		freq_re = Re("FREQUENCY[ ]*[:=](.*)MH[Zz]")
+		input_params_re = Re("[ -]*ANTENNA INPUT PARAMETERS[ -]*")
+		inp_params_re = Re("[ -]*ANTENNA INPUT PARAMETERS[ -]*")
+		power_budget_re = Re("[ -]*POWER BUDGET[ -]*")
+		radiation_pattern_re = Re("[ -]*RADIATION PATTERNS[ -]*")
 		while i < len(lines):
 			ln = lines[i].strip()
-			if ln == "- - - - - - FREQUENCY - - - - - -":
-				i = i+2
-				freq = float(lines[i].strip()[10:-4])
+			if freq_re.match(ln):
+				freq = float(freq_re.res.group(1))
 #				if not len(self.frequencies) or self.frequencies[-1].valid():
 #					self.frequencies.append(FrequencyData(self.char_impedance))
 #				self.frequencies[-1].freq = freq
-			elif ln == "- - - ANTENNA INPUT PARAMETERS - - -":
-				i=i+4
+			elif input_params_re.match(ln):
+				if not len(lines[i+1].strip()): i+=1
+				i+=3
 				real = float(lines[i][60:72]) # at least one linux engine has calculated negative real impedance...
 				if real <= 0:
 					raise ValueError("engine reported invalid real impedance %.4f for frequency %.1f"%(real,freq) )
@@ -246,7 +259,7 @@ class NecOutputParser:
 				fd.AGT = self.AGT
 				fd.agt = self.agt
 
-			elif ln == "- - - POWER BUDGET - - -":
+			elif power_budget_re.match(ln):
 				while i < len(lines):
 					i+=1
 					if len(lines[i]) < 60: continue
@@ -262,7 +275,7 @@ class NecOutputParser:
 
 				if fd.radiated_power < 0:
 					raise ValueError("engine reported negative radiated power for frequency %.1f"%freq)
-			elif ln =="- - - RADIATION PATTERNS - - -":
+			elif radiation_pattern_re.match(ln):
 				i=i+5
 				angle = self.options.forward_dir
 #				freq = self.frequencies[-1].freq

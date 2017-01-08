@@ -28,7 +28,7 @@ def chooseEngine(engine, segs):
 	raise RuntimeError("Too many segments - use --engine to specify engine")
 
 class Sweep:
-	def __init__(self, ranges, angles, agt_freq,sweepid):
+	def __init__(self, ranges, angles, agt_freq, sweepid):
 		self.ranges = ranges
 		self.angles = angles
 		self.agt_freq = agt_freq
@@ -85,6 +85,7 @@ class NecEvaluator:
 		self.nec_file_input.updateVars(vars, lines[0])
 
 	def parseAgt(self, output):
+		import re
 		factor = 1 if not self.nec_file_input.has_ground else 2
 		file = open(output, "rt")
 		try : 
@@ -92,11 +93,11 @@ class NecEvaluator:
 		finally:
 			file.close()
 		i=len(lines)-1
-		tests = "   AVERAGE POWER GAIN="
-		testl = len(tests)
+		test = re.compile("[ ]*AVERAGE POWER GAIN[ ]*[=:][ ]*(.*)") #"   AVERAGE POWER GAIN="
 		while i >0:
-			if lines[i][0:testl]==tests:
-				agt = float(lines[i][testl+1:].strip().split()[0].lower())/factor
+			r = test.match(lines[i])
+			if r:
+				agt = float(r.group(1).strip().split()[0].lower())/factor
 				if agt <=0 :
 					raise ValueError("Invalid AGT value in output: %.4f"%agt)
 				return agt
@@ -278,6 +279,7 @@ class NecEvaluator:
 		lines.append("XQ")
 		lines.append("EN")
 		return lines
+		
 	def agtLines(self, nec_input_lines, sweep):
 		lines = []
 		for line in nec_input_lines:
@@ -317,12 +319,30 @@ class NecEvaluator:
 		finally:
 			if self.process_monitor:
 				self.process_monitor.removeProcess(popen)
-	
+
+	def runEngine(self, engine, nec_input, nec_output, engine_cin, wd):
+		import subprocess as sp
+		if self.options.engine_takes_cmd_args:
+			if engine == "nec2c":
+				self.handlePopen(sp.Popen([engine, "-i", nec_input, "-o", nec_output], cwd=wd))
+			else:
+				self.handlePopen(sp.Popen([engine, nec_input, nec_output], cwd=wd))
+		else:
+			try:
+				f = open(exe_input,"wt")
+				f.write(nec_input)
+				f.write("\n")
+				f.write(ec_output)
+				f.write("\n")
+				f.close()
+				f = open(exe_input)
+				self.handlePopen(sp.Popen(engine, stdin=f, stdout=open(os.devnull, "w"), cwd=wd))
+			finally:
+				f.close()
+
 	def runSweep(self, nec_input_lines, sweep, get_agt_scores, use_agt, id, number):
 		#print "Get agt score = %d"%get_agt_scores
 		#import tempfile as tmp
-		import subprocess as sp
-		import os
 		wd = self.options.output
 		try:
 			os.mkdir(wd)
@@ -368,37 +388,11 @@ class NecEvaluator:
 		if use_agt is not None:
 			agt = use_agt
 		elif self.options.agt_correction or get_agt_scores :
-			if self.options.engine_takes_cmd_args:
-				self.handlePopen(sp.Popen([engine, engine_agt_input, engine_nec_output], cwd=wd))
-			else:
-				try:
-					f = open(exe_input,"wt")
-					f.write(engine_agt_input)
-					f.write("\n")
-					f.write(engine_nec_output)
-					f.write("\n")
-					f.close()
-					f = open(exe_input)
-					self.handlePopen(sp.Popen(engine, stdin=f, stdout=open(os.devnull, "w"), cwd=wd))
-				finally:
-					f.close()
+			self.runEngine(engine, engine_agt_input, engine_nec_output, exe_input, wd)
 			agt = self.parseAgt(nec_output)
 			if get_agt_scores:
 				return (nec_output,agt)
-		if self.options.engine_takes_cmd_args:
-			self.handlePopen(sp.Popen([engine, engine_nec_input, engine_nec_output], cwd=wd))
-		else:
-			try:
-				f = open(exe_input,"wt")
-				f.write(engine_nec_input)
-				f.write("\n")
-				f.write(engine_nec_output)
-				f.write("\n")
-				f.close()
-				f = open(exe_input)
-				self.handlePopen(sp.Popen(engine, stdin=f, stdout=open(os.devnull, "w"), cwd=wd))
-			finally:
-				f.close()
+		self.runEngine(engine, engine_nec_input, engine_nec_output, exe_input, wd)
 		return (nec_output,agt)
 		
 	def runSweepT(self, nec_input_lines, sweep, number, result_map, result_lock, get_agt_scores, use_agt, id ):

@@ -1,1 +1,1 @@
-python -m nec.opt -e nec2 $*
+python -m nec.opt -e ${NECENGINE:-nec2} $*

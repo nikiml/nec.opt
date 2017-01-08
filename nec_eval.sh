@@ -1,1 +1,1 @@
-python -m nec.eval -e nec2 $*
+python -m nec.eval -e ${NECENGINE:-nec2} $*
