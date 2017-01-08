@@ -1,7 +1,7 @@
 from __future__ import division
 import math, os
 
-#gdrive_link_base = "https://drive.google.com/uc?id="#confirm=no_antivirus&id="
+#gdrive_link_base = "https://drive.google.com/uc?id="#confirm=no_antivirus&amp;id="
 
 #antenna_min_code = "0B4XLhzD2JVjBWkY0bXU4UUNKNXc"
 #gline_min_code = "0B4XLhzD2JVjBdXdla09IMGxsTUU"
@@ -9,7 +9,7 @@ import math, os
 #raphael_min_code = "0B4XLhzD2JVjBc0JpcWtoMXVGSGc"
 #sylvester_min_code = "0B4XLhzD2JVjBck9vMExqSk1VM3M"
 
-website_link_base = "file:///"+os.path.join(os.path.dirname(__file__), "html").replace(os.sep,"/")
+website_link_base = "file:///"+os.path.dirname(__file__).replace(os.sep,"/")
 antenna_min_url = "/js/antenna-min.js"
 gline_min_url = "/js/g.line-min.js"
 graphael_min_url = "/js/g.raphael-min.js"
@@ -17,29 +17,14 @@ raphael_min_url = "/js/raphael-min.js"
 sylvester_min_url = "/js/sylvester-min.js"
 nec2_code_viewer_url = "/js/nec2_code_viewer2-min.js"
 antenna_model_viewer_min = "/js/antenna-model-viewer-min.js"
-tabs_css_url = "/blueprint/tabs.css"
-blueprint_screen_url = "/blueprint/screen.css"
-blueprint_print_url = "/blueprint/print.css"
-blueprint_ie_url = "/blueprint/ie.css"
-custom_css_url = "/custom.css"
-menu_url = "/js/menu.js"
+tabs_css_url = "/css/tabs.css"
+blueprint_screen_url = "/css/screen.css"
+blueprint_print_url = "/css/print.css"
+blueprint_ie_url = "/css/ie.css"
+custom_css_url = "/css/custom.css"
 
-website_link_base_publish = "http://mladenov.com/~nickm/"
+website_link_base_publish = "http://mladenov.ca/~nickm/nec"
 
-#website_link_base = "http://mladenov.ca/~nickm/antenna-api/"
-#antenna_min_url = "antenna-min.js"
-#gline_min_url = "g.line-min.js"
-#graphael_min_url = "g.raphael-min.js"
-#raphael_min_url = "raphael-min.js"
-#sylvester_min_url = "sylvester-min.js"
-#nec2_code_viewer_url = "nec2_code_viewer2-min.js"
-#antenna_model_viewer_min = "antenna-model-viewer-min.js"
-#tabs_css_url = "tabs.css"
-#blueprint_screen_url = "../blueprint/screen.css"
-#blueprint_print_url = "../blueprint/print.css"
-#blueprint_ie_url = "../blueprint/ie.css"
-#custom_css_url = "../custom.css"
-#menu_url = "../js/menu.js"
 
 def html (website_link_base):
 	return  '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">\n\
@@ -57,12 +42,48 @@ def html (website_link_base):
 	<link rel="stylesheet" href="'+website_link_base+blueprint_print_url+'" type="text/css" media="print" />\n\
 	<!--[if lt IE 8]><link rel="stylesheet" href="'+website_link_base+blueprint_ie_url+'" type="text/css" media="screen, projection"/><![endif]-->\n\
 	<link rel="stylesheet" href="'+website_link_base+custom_css_url+'" type="text/css" media="screen, projection, print" />\n\
+</head>\n\
+\n\
+<body>\n\
+	<div style="margin-top:.5em; margin-right:.5em; margin-left:.5em; margin-bottom:.5em">\n\
+		<ul class="tabs" id="tabs">\n\
+			<li><a class="selected" id="nec_code_tab" href="javascript:showNecCode()">Nec code</a></li>\n\
+			<li><a id="nec_model_tab" href="javascript:showNecModel()">Model</a></li>\n\
+			<li><a id="pattern_tab" href="javascript:showTab(\'pattern\')">Pattern</a></li>\n\
+			%(chart_tabs)s\n\
+			<li><a id="results_tab" href="javascript:showTab(\'results\')">Results</a></li>\n\
+			<li><a id="links_tab" href="javascript:showTab(\'links\')">Links</a></li>\n\
+			<li><a id="home_tab" href="http://mladenov.ca/~nickm">nikiml\'s Antenna pages home</a></li>\n\
+			<li class="right">Copyright 2013 Nikolay Mladenov. email: nikolay dot mladenov at gmail dot com</li>\n\
+		</ul>\n\
+		<div class="tab" id="nec_code" style="height: 100%%; width:100%%;">\n\
+			<textarea class="" style="padding: 0px; margin: 0; width:100%%; height:98%%; overflow: auto;" >\n\
+%(nec_code)s\n\
+			</textarea>\n\
+		</div>\n\
+		<div class="tab" id="nec_model" style="height: 100%%; width:100%%;"></div>\n\
+		<div class="tab" id="pattern" style="height: 100%%; width:100%%;"></div>\n\
+		%(chart_divs)s\n\
+		<div class="tab" id="results" style="height: 100%%; width:100%%;">\n\
+			<pre style="height: 98%%; width:98%%;overflow: auto; margin: 0px;padding: 0%%;border: 1px inset;">\n\
+%(results)s\n\
+			</pre></div>\n\
+		<div class="tab" id="links" style="height: 100%%; width:100%%;">\n\
+			<div class=""><a id="linklink" href="javascript:void(0);" title="Opens in a new window">Model Link: </a>\n\
+				<div class=""><input style="width:100%%" type="text" id="linktext"/></div>\n\
+			</div>\n\
+			<div class=""><a id="inlinelinklink" href="javascript:void(0);" title="Opens in a new window">Model Link that will be displayed inline on DHC: </a>\n\
+				<div class=""><input style="width:100%%" type="text" id="inlinelinktext"/></div>\n\
+			</div>\n\
+			%(chart_links)s\n\
+			%(pattern_link)s\n\
+		</div>\n\
+	</div>\n\
 	<script src="'+website_link_base+raphael_min_url+'" type="text/javascript" charset="utf-8"></script>\n\
 	<script src="'+website_link_base+graphael_min_url+'" type="text/javascript" charset="utf-8"></script>\n\
 	<script src="'+website_link_base+gline_min_url+'" type="text/javascript" charset="utf-8"></script>\n\
 	<script src="'+website_link_base+sylvester_min_url+'" type="text/javascript" charset="utf-8"></script>\n\
 	<script src="'+website_link_base+antenna_min_url+'" type="text/javascript" charset="utf-8"></script>\n\
-	<script src="'+website_link_base+menu_url+'" type="text/javascript" charset="utf-8"></script>\n\
 	\n\
 	<script type="text/javascript" charset="utf-8">\n\
 		NecViewer = {code:"",embeded:1}\n\
@@ -70,7 +91,7 @@ def html (website_link_base):
 	<script src="'+website_link_base+antenna_model_viewer_min+'" type="text/javascript" charset="utf-8"></script>\n\
 	<script src="'+website_link_base+nec2_code_viewer_url+'" type="text/javascript" charset="utf-8"></script>\n\
 	<script type="text/javascript" charset="utf-8">\n\
-		var height = NecViewer.getClientHeight()-100,  width = NecViewer.getClientWidth()-250;\n\
+		var base_link="'+website_link_base+'";\n\
 		var showTab = function (id) \n\
 		{\n\
 			var i, divs = document.getElementsByTagName("div"),\n\
@@ -107,15 +128,15 @@ def html (website_link_base):
 			if (NecViewer.code != code) {\n\
 				NecViewer.code = code;\n\
 				link = NecViewer.extractNecGeometry(code, "%(model_name)s");\n\
-				link = link.replace("_g2.html", "_g2.html?id=%(model_name)s");\n\
-				nec_model_div.innerHTML = "<object data=\\"" + link + "\\" style=\\"height:100%%; width:100%%;\\"></object>";\n\
-				linktext.value = link;\n\
-				linklink.href = link;\n\
-				linklink.setAttribute("target", "_blank");\n\
-				link = link.replace("_g2.html", "g2.html");\n\
+				nec_model_div.innerHTML = "<object data=\\"" + link.replace(/.*html/, base_link+"/viewer/n2.html?id=%(model_name)s") + "\\" style=\\"height:100%%; width:100%%;\\"></object>";\n\
+				link = link.replace("g2.html", "g2.html?id=%(model_name)s");\n\
 				inlinelinktext.value = link;\n\
 				inlinelinklink.href = link;\n\
 				inlinelinklink.setAttribute("target", "_blank");\n\
+				link = link.replace("g2.html", "_g2.html");\n\
+				linktext.value = link;\n\
+				linklink.href = link;\n\
+				linklink.setAttribute("target", "_blank");\n\
 			}\n\
 			linktext.select();\n\
 			showTab("nec_model");\n\
@@ -124,7 +145,7 @@ def html (website_link_base):
 	<script type="text/javascript" charset="utf-8">\n\
 		window.onload = function() \n\
 		{\n\
-			createMenu("eval_viewer", "http://mladenov.ca/~nickm/", 1);\n\
+			var height = NecViewer.getClientHeight() - document.getElementById("tabs").clientHeight*2.5,  width = NecViewer.getClientWidth();\n\
 			var i, divs = document.getElementsByTagName("div");\n\
 			for(i=0; i!=divs.length; ++i)\n\
 				if (divs[i].className !="tab")\n\
@@ -137,45 +158,6 @@ def html (website_link_base):
 			showTab("nec_code"); \n\
 		};\n\
 	</script>\n\
-</head>\n\
-\n\
-<body>\n\
-<div id="menu" style="float:left; width:190px; background-color:#E5ECF9; margin-left:10px; margin-top:20px; padding:10px"></div>\n\
-<div style="margin-top:20px; margin-right:10px; margin-left:240px">\n\
-	<div>\n\
-		<ul class="tabs" id="tabs">\n\
-			<li><a class="selected" id="nec_code_tab" href="javascript:showNecCode()">Nec code</a></li>\n\
-			<li><a id="nec_model_tab" href="javascript:showNecModel()">Model</a></li>\n\
-			<li><a id="pattern_tab" href="javascript:showTab(\'pattern\')">Pattern</a></li>\n\
-			%(chart_tabs)s\n\
-			<li><a id="results_tab" href="javascript:showTab(\'results\')">Results</a></li>\n\
-			<li><a id="links_tab" href="javascript:showTab(\'links\')">Links</a></li>\n\
-		</ul>\n\
-		<div class="tab" id="nec_code" style="height: 100%%; width:100%%;">\n\
-			<textarea class="" style="padding: 0px; margin: 0; width:100%%; height:98%%; overflow: auto;" >\n\
-%(nec_code)s\n\
-			</textarea>\n\
-		</div>\n\
-		<div class="tab" id="nec_model" style="height: 100%%; width:100%%;"></div>\n\
-		<div class="tab" id="pattern" style="height: 100%%; width:100%%;"></div>\n\
-		%(chart_divs)s\n\
-		<div class="tab" id="results" style="height: 100%%; width:100%%;">\n\
-			<pre style="height: 94%%; width:97%%;overflow: auto; margin: 0px;padding: 1%%;border: 2px inset;">\n\
-%(results)s\n\
-			</pre></div>\n\
-		<div class="tab" id="links" style="height: 100%%; width:100%%;">\n\
-			<div class=""><a id="linklink" href="javascript:void(0);" title="Opens in a new window">Model Link: </a>\n\
-				<div class=""><input style="width:100%%" type="text" id="linktext"/></div>\n\
-			</div>\n\
-			<div class=""><a id="inlinelinklink" href="javascript:void(0);" title="Opens in a new window">Model Link that will be displayed inline on DHC: </a>\n\
-				<div class=""><input style="width:100%%" type="text" id="inlinelinktext"/></div>\n\
-			</div>\n\
-			%(chart_links)s\n\
-			%(pattern_link)s\n\
-		</div>\n\
-	</div>\n\
-	<div><p>Copyright 2013 Nikolay Mladenov. Email: nikolay dot mladenov at gmail dot com</p></div>\n\
-</div>\n\
 </body>\n\
 </html>\n\
 '
@@ -247,7 +229,7 @@ class HtmlOutput:
 	def addHPattern(self, sweeps, data):
 		sym = self.isPatternSymmetric(data)
 		pattern_link="chp.html?id=%s#"%self.model_name
-		pattern_link+="&".join(map(lambda x: "sweep=[%g,%g,%g]"%(x[0],x[1],x[2]), sweeps ) )
+		pattern_link+="&amp;".join(map(lambda x: "sweep=[%g,%g,%g]"%(x[0],x[1],x[2]), sweeps ) )
 		
 		keys = sorted(data.keys())
 		self.h_pattern_script = []
@@ -269,8 +251,8 @@ class HtmlOutput:
 		self.h_pattern_script.append("ptrn.draw();\n")
 		sweeps = sorted(sweeps)
 		max_gain = max(map(lambda x: max(data[x]), keys) )
-		pattern_link+="&hpmeta=%g,%d,%d,%s"%(max_gain, freq_len, sym,self.model_name)
-		pattern_link+="&hpdata="
+		pattern_link+="&amp;hpmeta=%g,%d,%d,%s"%(max_gain, freq_len, sym,self.model_name)
+		pattern_link+="&amp;hpdata="
 		for sweep in sweeps:
 			for i in range(sweep[2]):
 				key = sweep[0]+i*sweep[1]
@@ -313,7 +295,7 @@ class HtmlOutput:
 			min_h = max(24*(max_gain-min_gain)+40, 240)
 			self.chart_tabs.append( '<li><a id="%(name)s_tab" href="javascript:showTab(\'%(name)s\')">%(name)s</a></li>\n' %{"name":sweep_name})
 			self.chart_divs.append( '<div class="tab" id="%s" style="height: %dpx; width:80%%"></div>\n'%(sweep_name, min_h))
-			self.chart_links.append( '<div><a href="http://mladenov.ca/~nickm/viewer/c.html?id=%s#title=%s Gain and SWR(%d Ohm)&sweep=[%g,%g,%g]&amp;gain=[%s]&amp;raw=[%s]&amp;swr=[%s]">%s chart viewer link</a></div>\n'%
+			self.chart_links.append( '<div><a href="http://mladenov.ca/~nickm/viewer/c.html?id=%s#title=%s Gain and SWR(%d Ohm)&amp;sweep=[%g,%g,%g]&amp;gain=[%s]&amp;raw=[%s]&amp;swr=[%s]">%s chart viewer link</a></div>\n'%
 				(self.model_name, self.model_name, char_impedance, sweep[0],sweep[1],sweep[2], ("%g,"*len(gains))[0:-1]%tuple(gains), ("%g,"*len(raws))[0:-1]%tuple(raws), ("%g,"*len(swrs))[0:-1]%tuple(swrs), sweep_name ))
 			self.chart_scripts.append('gainChart("%(sweep_name)s", width*.75, %(height)d, %(freqs)s,%(gains)s,%(swrs)s, %(min_gain)d, %(max_gain)d, %(max_swr).1f, "%(title)s");\n' % {
 				'sweep_name':sweep_name,
