@@ -1,6 +1,6 @@
 from __future__ import division
 from threading import Lock, Thread
-from time import clock, sleep
+from time import perf_counter as clock, sleep
 import pdb
 from nec.print_out import printOut
 class ProcessMonitor:
